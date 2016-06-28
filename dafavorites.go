@@ -19,6 +19,9 @@ import (
 const baseRss = "http://backend.deviantart.com/rss.xml?q=favby%3A___usern___%2F2573873&type=deviation"
 
 func fetchItems(username string) []deviantart.RssItem {
+	// TODO Turn into logging because because user already knows which user's
+	// favorites are fetched and this information certainly shouldn't be printed
+	// here anyway.
 	log.Printf("Fetch information on %s's favorite deviations", username)
 	// Fetch first RssFile
 	// Grab all items and store them
@@ -27,6 +30,7 @@ func fetchItems(username string) []deviantart.RssItem {
 	url := strings.Replace(baseRss, "___usern___", username, 1)
 	rssFile = deviantart.FetchRssFile(url)
 	var rssItems []deviantart.RssItem
+	// TODO Add break point in case the loop goes on forever
 	for {
 		rssItems = append(rssItems, rssFile.RssItems...)
 		if len(rssFile.NextUrl) == 0 {
@@ -50,10 +54,13 @@ type DeviantFetch struct {
 	Timestamp       time.Time
 }
 
+// Generate UUID string
+// Grabbed from https://play.golang.org/p/4FkNSiUDMg
 func newUuid() (string, error) {
 	uuid := make([]byte, 16)
 	n, err := io.ReadFull(rand.Reader, uuid)
 	if n != len(uuid) || err != nil {
+		// TODO Add logging
 		return "", err
 	}
 	// variant bits; see section 4.1.1
@@ -73,6 +80,8 @@ func downloadImages(dirname, url string, dryRun bool) string {
 		dirpath := filepath.Join(dirname, uuid)
 		err := os.MkdirAll(dirpath, 0700)
 		if err != nil {
+			// TODO Return err
+			// TODO Add logging
 			fmt.Fprintln(os.Stderr, "Failed to create directories for", dirpath)
 			fmt.Fprintln(os.Stderr, err)
 			return ""
@@ -81,6 +90,8 @@ func downloadImages(dirname, url string, dryRun bool) string {
 
 	src, err := http.Get(url)
 	if err != nil {
+		// TODO Return err
+		// TODO Add logging
 		fmt.Fprintln(os.Stderr, "Failed to fetch image.")
 		fmt.Fprintln(os.Stderr, err)
 		return ""
@@ -89,14 +100,19 @@ func downloadImages(dirname, url string, dryRun bool) string {
 
 	dest, err := os.Create(fpath)
 	if err != nil {
+		// TODO Return err
+		// TODO Add logging
 		fmt.Fprintln(os.Stderr, "Failed to create image file:", fpath)
 		fmt.Fprintln(os.Stderr, err)
 		return ""
 	}
 	defer dest.Close()
+	defer fmt.Println("Deviation downloaded:", fpath)
 
 	byteCount, err := io.Copy(dest, src.Body)
 	if err != nil {
+		// TODO Return err
+		// TODO Add logging
 		fmt.Fprintln(os.Stderr, "Failed to copy image to file from", fpath)
 		fmt.Fprintln(os.Stderr, "Count of bytes copied:", byteCount)
 		fmt.Fprintln(os.Stderr, err)
@@ -121,30 +137,52 @@ func toDeviantFetch(rssItems []deviantart.RssItem, dirname string) DeviantFetch 
 	}
 }
 
+func app(username, dirpath string) error {
+	rssItems := fetchItems(username)
+	deviantFetch := toDeviantFetch(rssItems, dirpath)
+	jsonBytes, err := json.Marshal(deviantFetch)
+	if err != nil {
+		// TODO Add logging
+		fmt.Fprintln(os.Stderr, "Conversion to json failed.")
+		fmt.Fprintln(os.Stderr, err)
+		return err
+	}
+
+	err = ioutil.WriteFile("deviantFetch.json", jsonBytes, 0644)
+	if err != nil {
+		// TODO Add logging
+		fmt.Fprintln(os.Stderr, err)
+		return err
+	}
+
+	return nil
+}
+
 func main() {
 	args := os.Args[1:]
 	if len(args) < 1 {
 		fmt.Println("Missing username")
 		fmt.Printf("Usage: %s {username}\n", os.Args[0])
-	} else {
-		username := strings.TrimSpace(os.Args[1])
-		if len(username) == 0 {
-			fmt.Println("Username can't be empty")
-		} else {
-			rssItems := fetchItems(username)
-			dirname, _ := ioutil.TempDir("", "")
-			fmt.Println("Create directory:", dirname)
-			deviantFetch := toDeviantFetch(rssItems, dirname)
-			jsonBytes, err := json.Marshal(deviantFetch)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Conversion to json failed.")
-				fmt.Fprintln(os.Stderr, err)
-			} else {
-				err = ioutil.WriteFile("deviantFetch.json", jsonBytes, 0644)
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-				}
-			}
-		}
+		return
+	}
+
+	username := strings.TrimSpace(os.Args[1])
+	if len(username) == 0 {
+		fmt.Println("Username can't be empty")
+		return
+	}
+
+	dirpath, err := ioutil.TempDir("", "")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to create a temporary directory.")
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+
+	fmt.Println("Create directory:", dirpath)
+	err = app(username, dirpath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed.")
+		fmt.Fprintln(os.Stderr, err)
 	}
 }

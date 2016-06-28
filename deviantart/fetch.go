@@ -8,13 +8,17 @@ import (
 	"strings"
 )
 
+// Dimensions of the deviation
 type Dimensions struct {
 	Width  int
 	Height int
 }
 
+// Deviation item
 type RssItem struct {
-	Title           string
+	// I.e. the name of the deviation
+	Title string
+	// URL to the deviation, usually identical to Guid
 	Link            string
 	Guid            string
 	PublicationDate string
@@ -103,6 +107,7 @@ type RssElement struct {
 	Channel ChannelElement `xml:"channel"`
 }
 
+// Convert deviant art structures to our own
 func itemElementsToItems(elements []RssItemElement) []RssItem {
 	var rssItems []RssItem
 	for _, each := range elements {
@@ -129,16 +134,19 @@ func itemElementsToItems(elements []RssItemElement) []RssItem {
 	return rssItems
 }
 
+// Fetch deviant art RSS from url
 func FetchRssFile(url string) RssFile {
 	log.Printf("Fetch rss file %s\n", url)
 	resp, err := http.Get(url)
 	if err != nil {
+		// TODO Return err and add logging
 		log.Printf("Failed to fetch rss file: %v\n", err)
 		return RssFile{}
 	}
 	defer resp.Body.Close()
 	contentBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		// TODO Return err and add logging
 		log.Printf("Failed to read fetched rss file: %v\n", err)
 		return RssFile{}
 	}
