@@ -24,3 +24,6 @@ tags
 *.exe
 *.test
 *.prof
+
+# Vim swap files
+*.swp
