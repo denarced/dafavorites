@@ -18,28 +18,32 @@ import (
 
 const baseRss = "http://backend.deviantart.com/rss.xml?q=favby%3A___usern___%2F2573873&type=deviation"
 
-func fetchItems(username string) []deviantart.RssItem {
-	// TODO Turn into logging because because user already knows which user's
-	// favorites are fetched and this information certainly shouldn't be printed
-	// here anyway.
+func fetchItems(username string) (rssItems []deviantart.RssItem, err error) {
 	log.Printf("Fetch information on %s's favorite deviations", username)
 	// Fetch first RssFile
 	// Grab all items and store them
 	// If RssFile.NextUrl contains something, continue with it
-	var rssFile deviantart.RssFile
 	url := strings.Replace(baseRss, "___usern___", username, 1)
-	rssFile = deviantart.FetchRssFile(url)
-	var rssItems []deviantart.RssItem
-	// TODO Add break point in case the loop goes on forever
+	var rssFile deviantart.RssFile
+	rssFile, err = deviantart.FetchRssFile(url)
+	if err != nil {
+		return
+	}
 	for {
 		rssItems = append(rssItems, rssFile.RssItems...)
 		if len(rssFile.NextUrl) == 0 {
+			log.Println("There's no next URL so fetching RSS XMLs is over.")
 			break
+		} else {
+			log.Println("Fetching another RSS XML:", rssFile.NextUrl)
 		}
 
-		rssFile = deviantart.FetchRssFile(rssFile.NextUrl)
+		rssFile, err = deviantart.FetchRssFile(rssFile.NextUrl)
+		if err != nil {
+			return
+		}
 	}
-	return rssItems
+	return
 }
 
 // A single saved deviation
@@ -137,25 +141,29 @@ func toDeviantFetch(rssItems []deviantart.RssItem, dirname string) DeviantFetch 
 	}
 }
 
-func app(username, dirpath string) error {
-	rssItems := fetchItems(username)
+func app(username, dirpath string) (err error) {
+	var rssItems []deviantart.RssItem
+	rssItems, err = fetchItems(username)
+	if err != nil {
+		return
+	}
 	deviantFetch := toDeviantFetch(rssItems, dirpath)
 	jsonBytes, err := json.Marshal(deviantFetch)
 	if err != nil {
 		// TODO Add logging
 		fmt.Fprintln(os.Stderr, "Conversion to json failed.")
 		fmt.Fprintln(os.Stderr, err)
-		return err
+		return
 	}
 
 	err = ioutil.WriteFile("deviantFetch.json", jsonBytes, 0644)
 	if err != nil {
 		// TODO Add logging
 		fmt.Fprintln(os.Stderr, err)
-		return err
+		return
 	}
 
-	return nil
+	return
 }
 
 func main() {
@@ -169,14 +177,14 @@ func main() {
 	username := strings.TrimSpace(os.Args[1])
 	if len(username) == 0 {
 		fmt.Println("Username can't be empty")
-		return
+		os.Exit(1)
 	}
 
 	dirpath, err := ioutil.TempDir("", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to create a temporary directory.")
 		fmt.Fprintln(os.Stderr, err)
-		return
+		os.Exit(2)
 	}
 
 	fmt.Println("Create directory:", dirpath)
@@ -184,5 +192,6 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed.")
 		fmt.Fprintln(os.Stderr, err)
+		os.Exit(3)
 	}
 }

@@ -27,6 +27,7 @@ type RssItem struct {
 	Dimensions      Dimensions
 }
 
+// Items of the one Deviant Art RSS file and the next one's URL
 type RssFile struct {
 	NextUrl  string
 	RssItems []RssItem
@@ -40,6 +41,8 @@ type LinkElement struct {
 	Href string `xml:"href,attr"`
 }
 
+// A credit element in Deviant Art RSS xml.
+// Example: <media:credit role="author" scheme="urn:ebu">WojtekFus</media:credit>
 type ItemCreditElement struct {
 	Role  string `xml:"role,attr"`
 	Value string `xml:",chardata"`
@@ -135,25 +138,25 @@ func itemElementsToItems(elements []RssItemElement) []RssItem {
 }
 
 // Fetch deviant art RSS from url
-func FetchRssFile(url string) RssFile {
+func FetchRssFile(url string) (RssFile, error) {
 	log.Printf("Fetch rss file %s\n", url)
 	resp, err := http.Get(url)
 	if err != nil {
-		// TODO Return err and add logging
+		// TODO Add logging
 		log.Printf("Failed to fetch rss file: %v\n", err)
-		return RssFile{}
+		return RssFile{}, err
 	}
 	defer resp.Body.Close()
 	contentBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		// TODO Return err and add logging
+		// TODO Add logging
 		log.Printf("Failed to read fetched rss file: %v\n", err)
-		return RssFile{}
+		return RssFile{}, err
 	}
 
 	rssElement := RssElement{}
 	xml.Unmarshal(contentBytes, &rssElement)
-	var rssItems []RssItem = itemElementsToItems(rssElement.Channel.RssItems)
+	rssItems := itemElementsToItems(rssElement.Channel.RssItems)
 
 	var next string
 	for _, each := range rssElement.Channel.Links {
@@ -166,5 +169,5 @@ func FetchRssFile(url string) RssFile {
 	return RssFile{
 		NextUrl:  next,
 		RssItems: rssItems,
-	}
+	}, nil
 }
