@@ -1,0 +1,7 @@
+if block ends with a return statement, so drop this else and outdent its block
+comment on exported type.*with optional leading article
+comment on exported function .* should be of the form
+.*UUID.*
+.*GUID.*
+.*URL.*
+.*[jJ]son.*JSON.*

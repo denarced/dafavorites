@@ -5,7 +5,15 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
+)
+
+const logFlags = log.LstdFlags | log.Lshortfile
+
+var (
+	infoLogger  = log.New(os.Stdout, "INFO ", logFlags)
+	errorLogger = log.New(os.Stderr, "ERROR ", logFlags)
 )
 
 // Dimensions of the deviation
@@ -139,18 +147,16 @@ func itemElementsToItems(elements []RssItemElement) []RssItem {
 
 // Fetch deviant art RSS from url
 func FetchRssFile(url string) (RssFile, error) {
-	log.Printf("Fetch rss file %s\n", url)
+	infoLogger.Println("Fetch RSS file:", url)
 	resp, err := http.Get(url)
 	if err != nil {
-		// TODO Add logging
-		log.Printf("Failed to fetch rss file: %v\n", err)
+		errorLogger.Println("Failed to fetch RSS file:", err)
 		return RssFile{}, err
 	}
 	defer resp.Body.Close()
 	contentBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		// TODO Add logging
-		log.Printf("Failed to read fetched rss file: %v\n", err)
+		errorLogger.Println("Failed to read fetched rss file:", err)
 		return RssFile{}, err
 	}
 
