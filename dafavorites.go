@@ -17,7 +17,7 @@ import (
 	"github.com/denarced/dafavorites/deviantart"
 )
 
-const baseRss = "http://backend.deviantart.com/rss.xml?q=favby%3A___usern___%2F2573873&type=deviation"
+const baseRss = "http://backend.deviantart.com/rss.xml?q=favby%3A___usern___&type=deviation"
 const logFlags = log.LstdFlags | log.Lshortfile
 
 var (
