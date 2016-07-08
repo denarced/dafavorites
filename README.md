@@ -17,3 +17,6 @@ The end result will be the deviations in a temporary directory and information o
 
 # Future
 This little tool was created solely for my own use. I use it to backup my favorite deviations because often enough the authors decide to remove their creations from Deviant Art. It's good enough for now so I have no plans to further develop it.
+
+# Design
+I needed some practice on parallel execution and I used this project. To be clear: the level of parallel execution is way too high. Not necessary at all. I added parallelism merely to get some practice.
