@@ -2,10 +2,18 @@
 Fetch user's favorite deviations from deviantart.com
 
 # Usage
-Once built, the application would be used as follows to get a list of and download favorite deviations for user _denarced_:
+To build and fetch the favorites of user _david_:
 
-    ./dafavorites denarced
+    go get github.com/denarced/dafavorites && \
+        ./dafavorites david
   
-The command would write the favorites into deviantFetch.json and download the
-deviations to a temporary directory. At the moment you'll pretty have to read
-the source code in order to understand properly what's being done.
+It'll
+
+1. download the source code
+2. build the binary
+3. execute the binary
+
+The end result will be the deviations in a temporary directory and information on them in file _deviantFetch.json_. In the temporary directory each deviation is stored in its own sub directory in order to preserve the original filename. The sub directory names are UUIDs.
+
+# Future
+This little tool was created solely for my own use. I use it to backup my favorite deviations because often enough the authors decide to remove their creations from Deviant Art. It's good enough for now so I have no plans to further develop it.
