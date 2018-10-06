@@ -27,3 +27,6 @@ tags
 
 # Vim swap files
 *.swp
+
+# Coverage file
+cover.out
