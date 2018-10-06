@@ -137,9 +137,13 @@ func fetchRss(username string, rssItemChan chan deviantart.RssItem, finished cha
 	defer close(finished)
 
 	url := strings.Replace(baseRss, "___usern___", username, 1)
-	rssFile, err := deviantart.FetchRssFile(url)
+	resp, err := fetchRssFile(url)
 	if err != nil {
-		errorLogger.Println("Failed to fetch RSS file:", err)
+		return
+	}
+	defer resp.Body.Close()
+	rssFile, err := deviantart.ToRssFile(resp.Body)
+	if err != nil {
 		return
 	}
 	for {
@@ -153,12 +157,25 @@ func fetchRss(username string, rssItemChan chan deviantart.RssItem, finished cha
 			break
 		}
 
-		rssFile, err = deviantart.FetchRssFile(rssFile.NextUrl)
+		resp, err = fetchRssFile(rssFile.NextUrl)
 		if err != nil {
-			errorLogger.Println("Failed to fetch RSS file:", err)
+			return
+		}
+		defer resp.Body.Close()
+		rssFile, err = deviantart.ToRssFile(resp.Body)
+		if err != nil {
 			return
 		}
 	}
+}
+
+func fetchRssFile(url string) (resp *http.Response, err error) {
+	infoLogger.Println("Fetch RSS file:", url)
+	resp, err = http.Get(url)
+	if err != nil {
+		errorLogger.Println("Failed to fetch RSS file:", err)
+	}
+	return
 }
 
 // Download and save deviations. Jobs are received from rssItemChan and results

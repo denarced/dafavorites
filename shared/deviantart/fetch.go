@@ -5,7 +5,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 
@@ -148,16 +147,9 @@ func itemElementsToItems(elements []RssItemElement) []RssItem {
 	return rssItems
 }
 
-// Fetch deviant art RSS from url
-func FetchRssFile(url string) (RssFile, error) {
-	infoLogger.Println("Fetch RSS file:", url)
-	resp, err := http.Get(url)
-	if err != nil {
-		errorLogger.Println("Failed to fetch RSS file:", err)
-		return RssFile{}, err
-	}
-	defer resp.Body.Close()
-	contentBytes, err := ioutil.ReadAll(resp.Body)
+// ToRssFile converts reader contents to an RssFile
+func ToRssFile(reader io.Reader) (RssFile, error) {
+	contentBytes, err := ioutil.ReadAll(reader)
 	if err != nil {
 		errorLogger.Println("Failed to read fetched rss file:", err)
 		return RssFile{}, err
