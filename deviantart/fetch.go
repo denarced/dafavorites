@@ -2,11 +2,14 @@ package deviantart
 
 import (
 	"encoding/xml"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"golang.org/x/net/html"
 )
 
 const logFlags = log.LstdFlags | log.Lshortfile
@@ -176,4 +179,71 @@ func FetchRssFile(url string) (RssFile, error) {
 		NextUrl:  next,
 		RssItems: rssItems,
 	}, nil
+}
+
+// TODO Separate download and parsing to ease testing.
+func ExtractDownloadUrl(client *http.Client, url string) string {
+	response, err := client.Get(url)
+	if err != nil {
+		errorLogger.Printf("Failed to fetch HTML from %s\n", url)
+		return ""
+	}
+	defer response.Body.Close()
+
+	tokenizer := html.NewTokenizer(response.Body)
+	for {
+		tokenType := tokenizer.Next()
+		if tokenType == html.ErrorToken {
+			err := tokenizer.Err()
+			// TODO Fix this mess
+			if err == io.EOF {
+				break
+			} else {
+				errorLogger.Printf("Error parsing: %v\n", err)
+			}
+			break
+		} else if tokenType == html.StartTagToken {
+			tagBytes, hasAttrs := tokenizer.TagName()
+			if string(tagBytes) == "a" && hasAttrs {
+				linkURL := extractDownloadLinkURL(tokenizer)
+				if linkURL != "" {
+					return linkURL
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+func extractDownloadLinkURL(tokenizer *html.Tokenizer) string {
+	more := true
+	href := ""
+	isDownload := false
+	for more == true {
+		key, bytes, theresMore := tokenizer.TagAttr()
+		more = theresMore
+		if string(key) == "href" {
+			href = string(bytes)
+			if isDownload {
+				return href
+			}
+		}
+		if string(key) == "class" {
+			classes := strings.Split(string(bytes), " ")
+			for _, each := range classes {
+				if each == "" {
+					continue
+				}
+				if each == "dev-page-download" {
+					if href != "" {
+						return href
+					}
+					isDownload = true
+				}
+			}
+		}
+	}
+
+	return ""
 }

@@ -4,10 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,23 +63,29 @@ func newUuid() (string, error) {
 	return endResult, nil
 }
 
+type DownloadParams struct {
+	Client  *http.Client
+	Dirname string
+	Url     string
+	DryRun  bool
+	Uuid    string
+	Prefix  string
+}
+
 // Download file url to a directory under dirname unless dryRun is true. The
 // directory under dirname is created only for the downloaded file and its name
+// TODO Fix
 // is a UUID. An example call:
 //     downloadImages("/tmp/deviations", "http://site.com/image.jpg", false)
 //     "/tmp/deviations/06c6e05e-e22a-43d2-9e69-e198825e07fd/image.jpg"
-func downloadImages(dirname, url string, dryRun bool) string {
-	uuid, uuidErr := newUuid()
-	if uuidErr != nil {
-		return ""
-	}
-	pieces := strings.Split(url, "/")
-	fpath := filepath.Join(dirname, uuid, pieces[len(pieces)-1])
-	if dryRun {
+func downloadImages(params DownloadParams) string {
+	filename := deriveFilename(params.Prefix, params.Url)
+	fpath := filepath.Join(params.Dirname, params.Uuid, filename)
+	if params.DryRun {
 		infoLogger.Println("Dry run: skip download of ", fpath)
 		return fpath
 	} else {
-		dirpath := filepath.Join(dirname, uuid)
+		dirpath := filepath.Join(params.Dirname, params.Uuid)
 		err := os.MkdirAll(dirpath, 0700)
 		if err != nil {
 			errorLogger.Printf("Failed to create path. Path: %s. Error: %v.\n", dirpath, err)
@@ -83,7 +93,7 @@ func downloadImages(dirname, url string, dryRun bool) string {
 		}
 	}
 
-	src, err := http.Get(url)
+	src, err := params.Client.Get(params.Url)
 	if err != nil {
 		errorLogger.Println("Failed to fetch image:", err)
 		return ""
@@ -107,6 +117,17 @@ func downloadImages(dirname, url string, dryRun bool) string {
 	}
 
 	return fpath
+}
+
+func deriveFilename(prefix, url string) string {
+	pieces := strings.Split(url, "/")
+	// e.g. image.jpg?token=blaablaa or
+	//      image.jpg
+	withExtra := pieces[len(pieces)-1]
+	// e.g. [image.jpg token=blaablaa] or
+	//      [image.jpg]
+	extraPieces := strings.Split(withExtra, "?")
+	return prefix + "_" + extraPieces[0]
 }
 
 // Fetch RSS files and pass the deviations to be downloaded. The RSSs are
@@ -153,7 +174,27 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 	infoLogger.Println("Starting download worker", id)
 	for each := range rssItemChan {
 		infoLogger.Printf("Worker %d about to start downloading %s\n", id, each.Url)
-		filepath := downloadImages(dirpath, each.Url, dryRun)
+		cookieJar, _ := cookiejar.New(nil)
+		client := &http.Client{
+			Jar: cookieJar,
+		}
+		uuid, err := newUuid()
+		if err != nil {
+			errorLogger.Printf(
+				"UUID generation error when working with %s: %v\n",
+				each.Url,
+				err)
+			continue
+		}
+		params := DownloadParams{
+			Client:  client,
+			Dirname: dirpath,
+			Url:     each.Url,
+			DryRun:  dryRun,
+			Uuid:    uuid,
+			Prefix:  "regular",
+		}
+		filepath := downloadImages(params)
 		if len(filepath) == 0 {
 			// Nothing to be done if the download failed as the error should
 			// have been reported by the called function.
@@ -163,9 +204,55 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 			RssItem:  each,
 			Filename: filepath,
 		}
+
+		if dryRun {
+			continue
+		}
+
+		dlUrl := deviantart.ExtractDownloadUrl(client, each.Link)
+		if dlUrl == "" {
+			continue
+		}
+
+		dlParams := params
+		dlParams.Url = dlUrl
+		dlParams.Prefix = "large"
+		filepath = downloadImages(dlParams)
+		each.Url = dlUrl
+		dimensions := extractDimensions(filepath)
+		each.Dimensions = dimensions
+
+		savedDeviationChan <- SavedDeviation{
+			RssItem:  each,
+			Filename: filepath,
+		}
 	}
 
 	infoLogger.Println("Quitting download worker", id)
+}
+
+func extractDimensions(filepath string) (dimensions deviantart.Dimensions) {
+	reader, err := os.Open(filepath)
+	if err != nil {
+		errorLogger.Printf(
+			"Error opening image (%s): %s. Leaving dimensions to zeros.",
+			filepath,
+			err)
+		return
+	}
+
+	img, _, err := image.DecodeConfig(reader)
+	if err != nil {
+		errorLogger.Printf(
+			"Error decoding image (%s): %s\n",
+			filepath,
+			err)
+		return
+	}
+
+	dimensions.Width = img.Width
+	dimensions.Height = img.Height
+	return
 }
 
 // Collected downloaded deviations into a single DeviantFetch. The deviations
@@ -249,6 +336,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Println("Create temporary directory")
 	dirpath, err := ioutil.TempDir("", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to create a temporary directory.")
@@ -256,7 +344,6 @@ func main() {
 		os.Exit(2)
 	}
 
-	fmt.Println("Create directory:", dirpath)
 	deviantFetch := fetchFavorites(username, dirpath, 4)
 	infoLogger.Println("Deviations fetched.")
 	err = saveJson(deviantFetch, "deviantFetch.json")
