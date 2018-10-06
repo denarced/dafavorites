@@ -209,16 +209,22 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 			continue
 		}
 
-		dlUrl := deviantart.ExtractDownloadUrl(client, each.Link)
-		if dlUrl == "" {
+		response, err := client.Get(each.Link)
+		if err != nil {
+			errorLogger.Printf("Failed to fetch HTML from %s\n", each.Link)
+			continue
+		}
+		defer response.Body.Close()
+		dlURL := deviantart.ExtractDownloadURL(response)
+		if dlURL == "" {
 			continue
 		}
 
 		dlParams := params
-		dlParams.Url = dlUrl
+		dlParams.Url = dlURL
 		dlParams.Prefix = "large"
 		filepath = downloadImages(dlParams)
-		each.Url = dlUrl
+		each.Url = dlURL
 		dimensions := extractDimensions(filepath)
 		each.Dimensions = dimensions
 

@@ -181,15 +181,7 @@ func FetchRssFile(url string) (RssFile, error) {
 	}, nil
 }
 
-// TODO Separate download and parsing to ease testing.
-func ExtractDownloadUrl(client *http.Client, url string) string {
-	response, err := client.Get(url)
-	if err != nil {
-		errorLogger.Printf("Failed to fetch HTML from %s\n", url)
-		return ""
-	}
-	defer response.Body.Close()
-
+func ExtractDownloadURL(response *http.Response) string {
 	tokenizer := html.NewTokenizer(response.Body)
 	for {
 		tokenType := tokenizer.Next()
