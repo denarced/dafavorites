@@ -181,16 +181,14 @@ func FetchRssFile(url string) (RssFile, error) {
 	}, nil
 }
 
-func ExtractDownloadURL(response *http.Response) string {
-	tokenizer := html.NewTokenizer(response.Body)
+// ExtractDownloadURL extracts download link URL from the HTML reader
+func ExtractDownloadURL(reader io.Reader) string {
+	tokenizer := html.NewTokenizer(reader)
 	for {
 		tokenType := tokenizer.Next()
 		if tokenType == html.ErrorToken {
 			err := tokenizer.Err()
-			// TODO Fix this mess
-			if err == io.EOF {
-				break
-			} else {
+			if err != io.EOF {
 				errorLogger.Printf("Error parsing: %v\n", err)
 			}
 			break

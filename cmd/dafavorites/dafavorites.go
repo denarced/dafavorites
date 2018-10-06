@@ -215,7 +215,7 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 			continue
 		}
 		defer response.Body.Close()
-		dlURL := deviantart.ExtractDownloadURL(response)
+		dlURL := deviantart.ExtractDownloadURL(response.Body)
 		if dlURL == "" {
 			continue
 		}
