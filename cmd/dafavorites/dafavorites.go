@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/denarced/dafavorites/deviantart"
+	"github.com/denarced/dafavorites/shared/deviantart"
 )
 
 const baseRss = "http://backend.deviantart.com/rss.xml?q=favby%3A___usern___&type=deviation"
