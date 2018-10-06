@@ -24,26 +24,26 @@ type Dimensions struct {
 	Height int
 }
 
-// Deviation item
+// RssItem is a single <item> in deviant art RSS
 type RssItem struct {
 	// I.e. the name of the deviation
 	Title string
-	// URL to the deviation, usually identical to Guid
+	// URL to the deviation, usually identical to GUID
 	Link            string
-	Guid            string
+	GUID            string
 	PublicationDate string
 	Author          string
-	Url             string
+	URL             string
 	Dimensions      Dimensions
 }
 
-// Items of the one Deviant Art RSS file and the next one's URL
+// RssFile is the items of the one Deviant Art RSS file and the next one's URL
 type RssFile struct {
-	NextUrl  string
+	NextURL  string
 	RssItems []RssItem
 }
 
-// URL to another Deviant Art RSS xml
+// LinkElement is a URL to another Deviant Art RSS xml
 type LinkElement struct {
 	// Relation, e.g. "next". Each RSS xml contains x amount of favorite items
 	// and then the URL in "next" contains the next RSS xml that contains more.
@@ -51,13 +51,14 @@ type LinkElement struct {
 	Href string `xml:"href,attr"`
 }
 
-// A credit element in Deviant Art RSS xml.
+// ItemCreditElement is a credit element in Deviant Art RSS xml.
 // Example: <media:credit role="author" scheme="urn:ebu">WojtekFus</media:credit>
 type ItemCreditElement struct {
 	Role  string `xml:"role,attr"`
 	Value string `xml:",chardata"`
 }
 
+// ItemContentElement in deviant art RSS xml.
 // Example:
 //     <media:content
 //         url="http://pre03.deviantart.net/bbec/th/pre/f/2015/347/b/f/model_no__th_x11_38_by_wojtekfus-d9k1rbm.jpg"
@@ -65,11 +66,12 @@ type ItemCreditElement struct {
 //         width="1192"
 //         medium="image"/>
 type ItemContentElement struct {
-	Url    string `xml:"url,attr"`
+	URL    string `xml:"url,attr"`
 	Width  int    `xml:"width,attr"`
 	Height int    `xml:"height,attr"`
 }
 
+// RssItemElement is a single <item> in deviant art RSS xml.
 // Contains information on any given favorite deviation.
 //
 // Example:
@@ -92,17 +94,17 @@ type ItemContentElement struct {
 type RssItemElement struct {
 	Title           string              `xml:"title"`
 	Link            string              `xml:"link"`
-	Guid            string              `xml:"guid"`
+	GUID            string              `xml:"guid"`
 	PublicationDate string              `xml:"pubDate"`
-	Url             string              `xml:"url"`
+	URL             string              `xml:"url"`
 	Width           int                 `xml:"width"`
 	Height          int                 `xml:"height"`
 	Credits         []ItemCreditElement `xml:"credit"`
 	Content         ItemContentElement  `xml:"content"`
 }
 
-// The single channel element in Deviant Art RSS xml that's located inside the
-// root rss element.
+// ChannelElement is the single channel element in Deviant Art RSS xml
+// that's located inside the root rss element.
 type ChannelElement struct {
 	// The link elements. In this bunch we're mostly interested in the "next"
 	// links.
@@ -112,7 +114,7 @@ type ChannelElement struct {
 	RssItems []RssItemElement `xml:"item"`
 }
 
-// The root element of Deviant Art's RSS xml
+// RssElement is the root element of Deviant Art's RSS xml
 type RssElement struct {
 	XMLName xml.Name `xml:"rss"`
 	// The single channel element in the xml. At least no more than one hasn't
@@ -134,10 +136,10 @@ func itemElementsToItems(elements []RssItemElement) []RssItem {
 		rssItems = append(rssItems, RssItem{
 			Title:           each.Title,
 			Link:            each.Link,
-			Guid:            each.Guid,
+			GUID:            each.GUID,
 			PublicationDate: each.PublicationDate,
 			Author:          author,
-			Url:             each.Content.Url,
+			URL:             each.Content.URL,
 			Dimensions: Dimensions{
 				Width:  each.Content.Width,
 				Height: each.Content.Height,
@@ -168,7 +170,7 @@ func ToRssFile(reader io.Reader) (RssFile, error) {
 	}
 
 	return RssFile{
-		NextUrl:  next,
+		NextURL:  next,
 		RssItems: rssItems,
 	}, nil
 }

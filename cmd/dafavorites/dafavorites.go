@@ -29,21 +29,21 @@ var (
 	errorLogger = log.New(os.Stderr, "ERROR ", logFlags)
 )
 
-// A single saved deviation
+// SavedDeviation is a single saved deviation
 type SavedDeviation struct {
 	RssItem  deviantart.RssItem
 	Filename string
 }
 
-// One full fetch, all deviations, their saved filenames etc.
+// DeviantFetch is one full fetch, all deviations, their saved filenames etc.
 type DeviantFetch struct {
 	SavedDeviations []SavedDeviation
 	Timestamp       time.Time
 }
 
-// Generate UUID string
+// NewUUID generates a single UUID string
 // Grabbed from https://play.golang.org/p/4FkNSiUDMg
-func newUuid() (string, error) {
+func NewUUID() (string, error) {
 	uuid := make([]byte, 16)
 	n, err := io.ReadFull(rand.Reader, uuid)
 	if n != len(uuid) || err != nil {
@@ -63,12 +63,13 @@ func newUuid() (string, error) {
 	return endResult, nil
 }
 
+// DownloadParams for downloading images from deviant art
 type DownloadParams struct {
 	Client  *http.Client
 	Dirname string
-	Url     string
+	URL     string
 	DryRun  bool
-	Uuid    string
+	UUID    string
 	Prefix  string
 }
 
@@ -79,21 +80,20 @@ type DownloadParams struct {
 //     downloadImages("/tmp/deviations", "http://site.com/image.jpg", false)
 //     "/tmp/deviations/06c6e05e-e22a-43d2-9e69-e198825e07fd/image.jpg"
 func downloadImages(params DownloadParams) string {
-	filename := deriveFilename(params.Prefix, params.Url)
-	fpath := filepath.Join(params.Dirname, params.Uuid, filename)
+	filename := deriveFilename(params.Prefix, params.URL)
+	fpath := filepath.Join(params.Dirname, params.UUID, filename)
 	if params.DryRun {
 		infoLogger.Println("Dry run: skip download of ", fpath)
 		return fpath
-	} else {
-		dirpath := filepath.Join(params.Dirname, params.Uuid)
-		err := os.MkdirAll(dirpath, 0700)
-		if err != nil {
-			errorLogger.Printf("Failed to create path. Path: %s. Error: %v.\n", dirpath, err)
-			return ""
-		}
+	}
+	dirpath := filepath.Join(params.Dirname, params.UUID)
+	err := os.MkdirAll(dirpath, 0700)
+	if err != nil {
+		errorLogger.Printf("Failed to create path. Path: %s. Error: %v.\n", dirpath, err)
+		return ""
 	}
 
-	src, err := params.Client.Get(params.Url)
+	src, err := params.Client.Get(params.URL)
 	if err != nil {
 		errorLogger.Println("Failed to fetch image:", err)
 		return ""
@@ -153,11 +153,11 @@ func fetchRss(username string, rssItemChan chan deviantart.RssItem, finished cha
 		}
 
 		// Fetch more deviations if there are some
-		if len(rssFile.NextUrl) == 0 {
+		if len(rssFile.NextURL) == 0 {
 			break
 		}
 
-		resp, err = fetchRssFile(rssFile.NextUrl)
+		resp, err = fetchRssFile(rssFile.NextURL)
 		if err != nil {
 			return
 		}
@@ -190,25 +190,25 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 
 	infoLogger.Println("Starting download worker", id)
 	for each := range rssItemChan {
-		infoLogger.Printf("Worker %d about to start downloading %s\n", id, each.Url)
+		infoLogger.Printf("Worker %d about to start downloading %s\n", id, each.URL)
 		cookieJar, _ := cookiejar.New(nil)
 		client := &http.Client{
 			Jar: cookieJar,
 		}
-		uuid, err := newUuid()
+		uuid, err := NewUUID()
 		if err != nil {
 			errorLogger.Printf(
 				"UUID generation error when working with %s: %v\n",
-				each.Url,
+				each.URL,
 				err)
 			continue
 		}
 		params := DownloadParams{
 			Client:  client,
 			Dirname: dirpath,
-			Url:     each.Url,
+			URL:     each.URL,
 			DryRun:  dryRun,
-			Uuid:    uuid,
+			UUID:    uuid,
 			Prefix:  "regular",
 		}
 		filepath := downloadImages(params)
@@ -238,10 +238,10 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 		}
 
 		dlParams := params
-		dlParams.Url = dlURL
+		dlParams.URL = dlURL
 		dlParams.Prefix = "large"
 		filepath = downloadImages(dlParams)
-		each.Url = dlURL
+		each.URL = dlURL
 		dimensions := extractDimensions(filepath)
 		each.Dimensions = dimensions
 
@@ -329,7 +329,7 @@ func fetchFavorites(username, dirpath string, dlWorkerCount int) DeviantFetch {
 }
 
 // Save information on fetched deviations to file filename.
-func saveJson(deviantFetch DeviantFetch, filename string) error {
+func saveJSON(deviantFetch DeviantFetch, filename string) error {
 	jsonBytes, err := json.Marshal(deviantFetch)
 	if err != nil {
 		errorLogger.Println("Conversion to json failed:", err)
@@ -369,7 +369,7 @@ func main() {
 
 	deviantFetch := fetchFavorites(username, dirpath, 4)
 	infoLogger.Println("Deviations fetched.")
-	err = saveJson(deviantFetch, "deviantFetch.json")
+	err = saveJSON(deviantFetch, "deviantFetch.json")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed.")
 		fmt.Fprintln(os.Stderr, err)

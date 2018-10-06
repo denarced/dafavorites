@@ -96,19 +96,19 @@ func TestToRssFile(t *testing.T) {
 	}
 	expectedNextURL := "https://backend.deviantart.com/rss.xml?" +
 		"type=deviation&offset=120&q=favedbyid%3A4471416&order=9"
-	if expectedNextURL != rssFile.NextUrl {
+	if expectedNextURL != rssFile.NextURL {
 		fmt.Println("Expected:", expectedNextURL)
-		fmt.Println("Actual:  ", rssFile.NextUrl)
+		fmt.Println("Actual:  ", rssFile.NextURL)
 		t.Errorf("Next URL isn't right")
 	}
 
 	firstItem := RssItem{
 		Title:           "Leya",
 		Link:            "https://art0fck.deviantart.com/art/Leya-671530106",
-		Guid:            "https://art0fck.deviantart.com/art/Leya-671530106",
+		GUID:            "https://art0fck.deviantart.com/art/Leya-671530106",
 		PublicationDate: "Tue, 28 Mar 2017 03:37:53 PDT",
 		Author:          "art0fCK",
-		Url:             "https://pre00.deviantart.net/04fc/th/pre/f/2017/087/d/3/d3cf26870151df8b05491ec8c1242fc8-db3t7y2.jpg",
+		URL:             "https://pre00.deviantart.net/04fc/th/pre/f/2017/087/d/3/d3cf26870151df8b05491ec8c1242fc8-db3t7y2.jpg",
 		Dimensions:      Dimensions{1095, 730},
 	}
 	if firstItem != rssFile.RssItems[0] {
@@ -119,10 +119,10 @@ func TestToRssFile(t *testing.T) {
 	lastItem := RssItem{
 		Title:           "double fluo",
 		Link:            "https://abrito.deviantart.com/art/double-fluo-64794797",
-		Guid:            "https://abrito.deviantart.com/art/double-fluo-64794797",
+		GUID:            "https://abrito.deviantart.com/art/double-fluo-64794797",
 		PublicationDate: "Thu, 13 Sep 2007 07:48:45 PDT",
 		Author:          "ABrito",
-		Url:             "https://orig00.deviantart.net/8878/f/2007/256/0/9/no_title_33_by_abrito.jpg",
+		URL:             "https://orig00.deviantart.net/8878/f/2007/256/0/9/no_title_33_by_abrito.jpg",
 		Dimensions:      Dimensions{750, 554},
 	}
 	actualLastItem := rssFile.RssItems[len(rssFile.RssItems)-1]
