@@ -63,22 +63,23 @@ func NewUUID() (string, error) {
 	return endResult, nil
 }
 
-// DownloadParams for downloading images from deviant art
+// DownloadParams for downloading images from deviant art.
 type DownloadParams struct {
-	Client  *http.Client
+	// Client to use to download the image. Must not be null.
+	Client *http.Client
+	// Dirname is the root dir into which images are downloaded.
 	Dirname string
-	URL     string
-	DryRun  bool
-	UUID    string
-	Prefix  string
+	// URL for the image to download.
+	URL string
+	// Don't actually download anything when true.
+	DryRun bool
+	// UUID to act as a sub dir under Dirname.
+	UUID string
+	// Prefix for the filename when it's saved in dir UUID.
+	Prefix string
 }
 
-// Download file url to a directory under dirname unless dryRun is true. The
-// directory under dirname is created only for the downloaded file and its name
-// TODO Fix
-// is a UUID. An example call:
-//     downloadImages("/tmp/deviations", "http://site.com/image.jpg", false)
-//     "/tmp/deviations/06c6e05e-e22a-43d2-9e69-e198825e07fd/image.jpg"
+// Download file params.URL with params as a specification.
 func downloadImages(params DownloadParams) string {
 	filename := deriveFilename(params.Prefix, params.URL)
 	fpath := filepath.Join(params.Dirname, params.UUID, filename)
@@ -127,7 +128,11 @@ func deriveFilename(prefix, url string) string {
 	// e.g. [image.jpg token=blaablaa] or
 	//      [image.jpg]
 	extraPieces := strings.Split(withExtra, "?")
-	return prefix + "_" + extraPieces[0]
+	separator := "_"
+	if prefix == "" {
+		separator = ""
+	}
+	return prefix + separator + extraPieces[0]
 }
 
 // Fetch RSS files and pass the deviations to be downloaded. The RSSs are
