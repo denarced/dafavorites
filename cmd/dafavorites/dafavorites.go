@@ -79,32 +79,38 @@ type DownloadParams struct {
 	Prefix string
 }
 
-// Download file params.URL with params as a specification.
-func downloadImages(params DownloadParams) string {
+// Download file params.URL with params as a specification. If the file's size
+// is <=minSize, don't save the file and return ("", size).
+// Return the downloaded file's filepath and size in bytes.
+func downloadImages(params DownloadParams, minSize int64) (string, int64) {
 	filename := deriveFilename(params.Prefix, params.URL)
 	fpath := filepath.Join(params.Dirname, params.UUID, filename)
 	if params.DryRun {
 		infoLogger.Println("Dry run: skip download of ", fpath)
-		return fpath
+		return "", 0
 	}
 	dirpath := filepath.Join(params.Dirname, params.UUID)
 	err := os.MkdirAll(dirpath, 0700)
 	if err != nil {
 		errorLogger.Printf("Failed to create path. Path: %s. Error: %v.\n", dirpath, err)
-		return ""
+		return "", 0
 	}
 
 	src, err := params.Client.Get(params.URL)
 	if err != nil {
 		errorLogger.Println("Failed to fetch image:", err)
-		return ""
+		return "", 0
 	}
 	defer src.Body.Close()
+
+	if src.ContentLength <= minSize {
+		return "", src.ContentLength
+	}
 
 	dest, err := os.Create(fpath)
 	if err != nil {
 		errorLogger.Printf("Failed to create image file. Filepath: %v. Error: %v.\n", fpath, err)
-		return ""
+		return "", 0
 	}
 	defer dest.Close()
 	defer infoLogger.Println("Deviation downloaded:", fpath)
@@ -114,10 +120,10 @@ func downloadImages(params DownloadParams) string {
 		errorLogger.Println("Failed to copy image to file from", fpath)
 		errorLogger.Println("Count of bytes copied:", byteCount)
 		errorLogger.Println("Error:", err)
-		return ""
+		return "", 0
 	}
 
-	return fpath
+	return fpath, byteCount
 }
 
 func deriveFilename(prefix, url string) string {
@@ -214,9 +220,9 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 			URL:     each.URL,
 			DryRun:  dryRun,
 			UUID:    uuid,
-			Prefix:  "regular",
+			Prefix:  "",
 		}
-		filepath := downloadImages(params)
+		filepath, size := downloadImages(params, 0)
 		if len(filepath) == 0 {
 			// Nothing to be done if the download failed as the error should
 			// have been reported by the called function.
@@ -245,7 +251,11 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 		dlParams := params
 		dlParams.URL = dlURL
 		dlParams.Prefix = "large"
-		filepath = downloadImages(dlParams)
+		// No point in even saving an image that's the same size or smaller
+		filepath, _ = downloadImages(dlParams, size)
+		if filepath == "" {
+			continue
+		}
 		each.URL = dlURL
 		dimensions := extractDimensions(filepath)
 		each.Dimensions = dimensions
