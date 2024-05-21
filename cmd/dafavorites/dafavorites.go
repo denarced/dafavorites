@@ -21,8 +21,11 @@ import (
 	"github.com/denarced/dafavorites/shared/deviantart"
 )
 
-const baseRss = "http://backend.deviantart.com/rss.xml?q=favby%3A___usern___&type=deviation"
-const logFlags = log.LstdFlags | log.Lshortfile
+const (
+	baseRss = "http://backend.deviantart.com/rss.xml" +
+		"?q=favby%3A___usern___&type=deviation"
+	logFlags = log.LstdFlags | log.Lshortfile
+)
 
 var (
 	infoLogger  = log.New(os.Stdout, "INFO ", logFlags)
@@ -91,7 +94,10 @@ func downloadImages(params DownloadParams, minSize int64) (string, int64) {
 	dirpath := filepath.Join(params.Dirname, params.UUID)
 	err := os.MkdirAll(dirpath, 0700)
 	if err != nil {
-		errorLogger.Printf("Failed to create path. Path: %s. Error: %v.\n", dirpath, err)
+		errorLogger.Printf(
+			"Failed to create path. Path: %s. Error: %v.\n",
+			dirpath,
+			err)
 		return "", 0
 	}
 
@@ -111,7 +117,10 @@ func downloadImages(params DownloadParams, minSize int64) (string, int64) {
 
 	dest, err := os.Create(fpath)
 	if err != nil {
-		errorLogger.Printf("Failed to create image file. Filepath: %v. Error: %v.\n", fpath, err)
+		errorLogger.Printf(
+			"Failed to create image file. Filepath: %v. Error: %v.\n",
+			fpath,
+			err)
 		return "", 0
 	}
 	defer dest.Close()
@@ -146,7 +155,10 @@ func deriveFilename(prefix, url string) string {
 // Fetch RSS files and pass the deviations to be downloaded. The RSSs are
 // fetched for user username and each deviation is passed to rssItemChan. Once
 // done, the channel finished is closed to signal that work is done.
-func fetchRss(username string, rssItemChan chan deviantart.RssItem, finished chan struct{}) {
+func fetchRss(
+	username string,
+	rssItemChan chan deviantart.RssItem,
+	finished chan struct{}) {
 	defer close(finished)
 
 	url := strings.Replace(baseRss, "___usern___", username, 1)
@@ -198,12 +210,22 @@ func fetchRssFile(url string) (resp *http.Response, err error) {
 // called in order to inform the caller that this method has completed. If
 // dryRun is true, nothing is really downloaded but otherwise the process is
 // executed in a normal fashion.
-func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem, savedDeviationChan chan SavedDeviation, waitGroup *sync.WaitGroup, dryRun bool) {
+func saveDeviations(
+	id int,
+	dirpath string,
+	rssItemChan chan deviantart.RssItem,
+	savedDeviationChan chan SavedDeviation,
+	waitGroup *sync.WaitGroup,
+	dryRun bool,
+) {
 	defer waitGroup.Done()
 
 	infoLogger.Println("Starting download worker", id)
 	for each := range rssItemChan {
-		infoLogger.Printf("Worker %d about to start downloading %s\n", id, each.URL)
+		infoLogger.Printf(
+			"Worker %d about to start downloading %s\n",
+			id,
+			each.URL)
 		infoLogger.Printf("Worker %d: create cookie jar\n", id)
 		cookieJar, _ := cookiejar.New(nil)
 		client := &http.Client{
@@ -228,15 +250,15 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 			Filename: filename,
 		}
 		infoLogger.Printf("Worker %d: download image\n", id)
-		filepath, size := downloadImages(params, 0)
-		if len(filepath) == 0 {
+		filep, size := downloadImages(params, 0)
+		if len(filep) == 0 {
 			// Nothing to be done if the download failed as the error should
 			// have been reported by the called function.
 			continue
 		}
 		savedDeviationChan <- SavedDeviation{
 			RssItem:  each,
-			Filename: filepath,
+			Filename: filep,
 		}
 
 		if dryRun {
@@ -253,7 +275,8 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 		pageReq, err := http.NewRequest("GET", resolvedURL, nil)
 		if err != nil {
 			errorLogger.Printf(
-				"Failed to create GET request for HTML page with URL %s resolved from %s: %v\n",
+				"Failed to create GET request for HTML page "+
+					"with URL %s resolved from %s: %v\n",
 				resolvedURL,
 				each.Link,
 				err)
@@ -290,38 +313,40 @@ func saveDeviations(id int, dirpath string, rssItemChan chan deviantart.RssItem,
 		dlParams.Filename = "large_" + filename
 		infoLogger.Printf("Worker %d: download large image\n", id)
 		// No point in even saving an image that's the same size or smaller
-		filepath, _ = downloadImages(dlParams, size)
-		if filepath == "" {
-			infoLogger.Printf("Worker %d: large download failed or image wasn't larger\n", id)
+		filep, _ = downloadImages(dlParams, size)
+		if filep == "" {
+			infoLogger.Printf(
+				"Worker %d: large download failed or image wasn't larger\n",
+				id)
 			continue
 		}
 		each.URL = dlURL
-		dimensions := extractDimensions(filepath)
+		dimensions := extractDimensions(filep)
 		each.Dimensions = dimensions
 
 		savedDeviationChan <- SavedDeviation{
 			RssItem:  each,
-			Filename: filepath,
+			Filename: filep,
 		}
 	}
 
 	infoLogger.Println("Quitting download worker", id)
 }
 
-func deriveURL(URL string) (string, error) {
-	res, err := http.Get(URL)
+func deriveURL(url string) (string, error) {
+	res, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}
 	return res.Request.URL.String(), nil
 }
 
-func extractDimensions(filepath string) (dimensions deviantart.Dimensions) {
-	reader, err := os.Open(filepath)
+func extractDimensions(filep string) (dimensions deviantart.Dimensions) {
+	reader, err := os.Open(filep)
 	if err != nil {
 		errorLogger.Printf(
 			"Error opening image (%s): %s. Leaving dimensions to zeros.",
-			filepath,
+			filep,
 			err)
 		return
 	}
@@ -330,7 +355,7 @@ func extractDimensions(filepath string) (dimensions deviantart.Dimensions) {
 	if err != nil {
 		errorLogger.Printf(
 			"Error decoding image (%s): %s\n",
-			filepath,
+			filep,
 			err)
 		return
 	}
@@ -343,10 +368,15 @@ func extractDimensions(filepath string) (dimensions deviantart.Dimensions) {
 // Collected downloaded deviations into a single DeviantFetch. The deviations
 // are received from savedDeviationChan and the end result is passed to
 // deviantFetchChan.
-func collectSavedDeviations(savedDeviationChan chan SavedDeviation, deviantFetchChan chan DeviantFetch) {
+func collectSavedDeviations(
+	savedDeviationChan chan SavedDeviation,
+	deviantFetchChan chan DeviantFetch,
+) {
 	var deviations []SavedDeviation
 	for each := range savedDeviationChan {
-		infoLogger.Println("Deviation has arrived to be collected:", each.Filename)
+		infoLogger.Println(
+			"Deviation has arrived to be collected:",
+			each.Filename)
 		deviations = append(deviations, each)
 	}
 	deviantFetchChan <- DeviantFetch{
@@ -369,7 +399,13 @@ func fetchFavorites(username, dirpath string, dlWorkerCount int) DeviantFetch {
 	savedDeviationChan := make(chan SavedDeviation)
 	for i := 0; i < dlWorkerCount; i++ {
 		dlWaitGroup.Add(1)
-		go saveDeviations(i, dirpath, rssItemChan, savedDeviationChan, &dlWaitGroup, false)
+		go saveDeviations(
+			i,
+			dirpath,
+			rssItemChan,
+			savedDeviationChan,
+			&dlWaitGroup,
+			false)
 	}
 
 	deviantFetchChan := make(chan DeviantFetch)

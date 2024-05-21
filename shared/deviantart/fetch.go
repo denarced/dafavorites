@@ -52,7 +52,8 @@ type LinkElement struct {
 }
 
 // ItemCreditElement is a credit element in Deviant Art RSS xml.
-// Example: <media:credit role="author" scheme="urn:ebu">WojtekFus</media:credit>
+// Example:
+//     <media:credit role="author" scheme="urn:ebu">WojtekFus</media:credit>
 type ItemCreditElement struct {
 	Role  string `xml:"role,attr"`
 	Value string `xml:",chardata"`
@@ -128,7 +129,8 @@ func itemElementsToItems(elements []RssItemElement) []RssItem {
 	for _, each := range elements {
 		var author string
 		for _, eachCredit := range each.Credits {
-			if eachCredit.Role == "author" && strings.HasPrefix(eachCredit.Value, "http") == false {
+			if eachCredit.Role == "author" &&
+				!strings.HasPrefix(eachCredit.Value, "http") {
 				author = eachCredit.Value
 				break
 			}
@@ -204,7 +206,7 @@ func extractDownloadLinkURL(tokenizer *html.Tokenizer) string {
 	more := true
 	href := ""
 	isDownload := false
-	for more == true {
+	for more {
 		key, bytes, theresMore := tokenizer.TagAttr()
 		more = theresMore
 		if string(key) == "href" {

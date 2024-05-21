@@ -3,70 +3,56 @@ package main
 import (
 	"testing"
 
+	"github.com/MarvinJWendt/testza"
 	"github.com/denarced/dafavorites/shared/deviantart"
 )
 
 func TestDeriveFilename(t *testing.T) {
-	var prefix string
-	var url string
-	var expected string
-
-	t.Run("No prefix", func(t *testing.T) {
-		url = "http://a.com/me.jpg"
-		expected = "me.jpg"
-	})
-	t.Run("With URL parameters", func(t *testing.T) {
-		prefix = "dox"
-		url = "http://a.com/me.jpg?param=value"
-		expected = "dox_me.jpg"
-	})
-	t.Run("With dirs in URL", func(t *testing.T) {
-		prefix = "longer"
-		url = "http://b.com/shut/down/more.jpg"
-		expected = "longer_more.jpg"
-	})
-
-	// EXERCISE
-	actual := deriveFilename(prefix, url)
-
-	// VERIFY
-	if expected != actual {
-		t.Errorf("Expected '%s' but got '%s'", expected, actual)
+	run := func(name, prefix, url, expected string) {
+		t.Run(name, func(t *testing.T) {
+			testza.AssertEqual(t, expected, deriveFilename(prefix, url))
+		})
 	}
+
+	run("No prefix", "", "http://a.com/me.jpg", "me.jpg")
+	run(
+		"With URL parameters",
+		"dox",
+		"http://a.com/me.jpg?param=value", "dox_me.jpg")
+	run(
+		"With dirs in URL",
+		"longer",
+		"http://b.com/shut/down/more.jpg",
+		"longer_more.jpg")
 }
 
 func TestExtractDimensions(t *testing.T) {
-	filepath := ""
-	expected := deviantart.Dimensions{}
+	run := func(name, filepath string, expected deviantart.Dimensions) {
+		t.Run(name, func(t *testing.T) {
+			testza.AssertEqual(t, expected, extractDimensions(filepath))
+		})
+	}
 
-	t.Run("jpg", func(t *testing.T) {
-		filepath = "testdata/test.jpg"
-		expected = deviantart.Dimensions{
+	run(
+		"jpg",
+		"testdata/test.jpg",
+		deviantart.Dimensions{
 			Width:  450,
 			Height: 29,
-		}
-	})
-	t.Run("png", func(t *testing.T) {
-		filepath = "testdata/test.png"
-		expected = deviantart.Dimensions{
+		})
+	run(
+		"png",
+		"testdata/test.png",
+		deviantart.Dimensions{
 			Width:  431,
 			Height: 39,
-		}
-	})
-	t.Run("Nonexistent file", func(t *testing.T) {
-		filepath = "nonexistent.file"
-		expected = deviantart.Dimensions{}
-	})
-	t.Run("Non-image file", func(t *testing.T) {
-		filepath = "dafavorites_test.go"
-		expected = deviantart.Dimensions{}
-	})
-
-	// EXERCISE
-	actual := extractDimensions(filepath)
-
-	// VERIFY
-	if expected != actual {
-		t.Errorf("Expected %v dimensions but got %v", expected, actual)
-	}
+		})
+	run(
+		"Nonexistent file",
+		"nonexistent.file",
+		deviantart.Dimensions{})
+	run(
+		"Non-image file",
+		"dafavorites_test.go",
+		deviantart.Dimensions{})
 }
