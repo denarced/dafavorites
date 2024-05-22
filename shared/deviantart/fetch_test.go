@@ -2,83 +2,11 @@ package deviantart
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
-	"strings"
 	"testing"
 
 	"github.com/MarvinJWendt/testza"
-	"golang.org/x/net/html"
 )
-
-func TestExtractDownloadLinkURL(t *testing.T) {
-	run := func(name, link, expected string) {
-		t.Run(name, func(t *testing.T) {
-			// SETUP SUT
-			reader := strings.NewReader(link)
-			tokenizer := html.NewTokenizer(reader)
-			tokenizer.Next()
-
-			// EXERCISE
-			actual := extractDownloadLinkURL(tokenizer)
-
-			// VERIFY
-			testza.AssertEqual(t, expected, actual)
-		})
-	}
-
-	run(
-		"Class first",
-		`<a class="dev-page-download" href="classFirst"/>`,
-		"classFirst")
-	run(
-		"Href first",
-		`<a href="hrefFirst" class=" dev-page-download"/>`,
-		"hrefFirst")
-	run(
-		"Just a",
-		"<a/>",
-		"")
-	run(
-		"Wrong class",
-		`<a href="wontBeReturned" class="not-the-right-one"`,
-		"")
-}
-
-func TestExtractDownloadURL(t *testing.T) {
-	run := func(name, response, expected string) {
-		t.Run(name, func(t *testing.T) {
-			testza.AssertEqual(
-				t,
-				expected,
-				ExtractDownloadURL(strings.NewReader(response)))
-		})
-	}
-
-	run(
-		"Just a inside div",
-		`<div><a href="hellgod" class="dev-page-download"></a></div>`,
-		"hellgod")
-
-	href := "https://realistic.com/real.jpg?funny=no"
-	run(
-		"More realistic test",
-		fmt.Sprintf(
-			`<html>
-				<head>
-					<title>Godlike Creation</title>
-				</head>
-				<body>
-					<div class="dev-page-download">
-						<a
-							class="dev-page-download"
-							href="%s">
-					</div>
-				</body>
-			</html>`,
-			href),
-		href)
-}
 
 func TestToRssFile(t *testing.T) {
 	// SETUP SUT

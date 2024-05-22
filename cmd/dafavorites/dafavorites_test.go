@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/MarvinJWendt/testza"
-	"github.com/denarced/dafavorites/shared/deviantart"
 )
 
 func TestDeriveFilename(t *testing.T) {
@@ -24,35 +23,4 @@ func TestDeriveFilename(t *testing.T) {
 		"longer",
 		"http://b.com/shut/down/more.jpg",
 		"longer_more.jpg")
-}
-
-func TestExtractDimensions(t *testing.T) {
-	run := func(name, filepath string, expected deviantart.Dimensions) {
-		t.Run(name, func(t *testing.T) {
-			testza.AssertEqual(t, expected, extractDimensions(filepath))
-		})
-	}
-
-	run(
-		"jpg",
-		"testdata/test.jpg",
-		deviantart.Dimensions{
-			Width:  450,
-			Height: 29,
-		})
-	run(
-		"png",
-		"testdata/test.png",
-		deviantart.Dimensions{
-			Width:  431,
-			Height: 39,
-		})
-	run(
-		"Nonexistent file",
-		"nonexistent.file",
-		deviantart.Dimensions{})
-	run(
-		"Non-image file",
-		"dafavorites_test.go",
-		deviantart.Dimensions{})
 }

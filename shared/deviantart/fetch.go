@@ -7,8 +7,6 @@ import (
 	"log"
 	"os"
 	"strings"
-
-	"golang.org/x/net/html"
 )
 
 const logFlags = log.LstdFlags | log.Lshortfile
@@ -125,30 +123,36 @@ type RssElement struct {
 
 // Convert deviant art structures to our own
 func itemElementsToItems(elements []RssItemElement) []RssItem {
-	var rssItems []RssItem
+	if len(elements) == 0 {
+		return []RssItem{}
+	}
+
+	rssItems := make([]RssItem, 0, len(elements))
 	for _, each := range elements {
-		var author string
-		for _, eachCredit := range each.Credits {
-			if eachCredit.Role == "author" &&
-				!strings.HasPrefix(eachCredit.Value, "http") {
-				author = eachCredit.Value
-				break
-			}
-		}
-		rssItems = append(rssItems, RssItem{
-			Title:           each.Title,
-			Link:            each.Link,
-			GUID:            each.GUID,
-			PublicationDate: each.PublicationDate,
-			Author:          author,
-			URL:             each.Content.URL,
-			Dimensions: Dimensions{
-				Width:  each.Content.Width,
-				Height: each.Content.Height,
-			},
-		})
+		rssItems = append(
+			rssItems,
+			RssItem{
+				Title:           each.Title,
+				Link:            each.Link,
+				GUID:            each.GUID,
+				PublicationDate: each.PublicationDate,
+				Author:          extractAuthor(each.Credits),
+				URL:             each.Content.URL,
+				Dimensions: Dimensions{
+					Width:  each.Content.Width,
+					Height: each.Content.Height}})
 	}
 	return rssItems
+}
+
+func extractAuthor(credits []ItemCreditElement) string {
+	for _, eachCredit := range credits {
+		if eachCredit.Role == "author" &&
+			!strings.HasPrefix(eachCredit.Value, "http") {
+			return eachCredit.Value
+		}
+	}
+	return ""
 }
 
 // ToRssFile converts reader contents to an RssFile
@@ -160,76 +164,23 @@ func ToRssFile(reader io.Reader) (RssFile, error) {
 	}
 
 	rssElement := RssElement{}
-	xml.Unmarshal(contentBytes, &rssElement)
+	if err = xml.Unmarshal(contentBytes, &rssElement); err != nil {
+		errorLogger.Println("Failed to unmarshal XML:", err)
+		return RssFile{}, err
+	}
 	rssItems := itemElementsToItems(rssElement.Channel.RssItems)
 
-	var next string
-	for _, each := range rssElement.Channel.Links {
-		if each.Rel == "next" {
-			next = each.Href
-			break
-		}
-	}
-
 	return RssFile{
-		NextURL:  next,
+		NextURL:  extractNextHref(rssElement.Channel.Links),
 		RssItems: rssItems,
 	}, nil
 }
 
-// ExtractDownloadURL extracts download link URL from the HTML reader
-func ExtractDownloadURL(reader io.Reader) string {
-	tokenizer := html.NewTokenizer(reader)
-	for {
-		tokenType := tokenizer.Next()
-		if tokenType == html.ErrorToken {
-			err := tokenizer.Err()
-			if err != io.EOF {
-				errorLogger.Printf("Error parsing: %v\n", err)
-			}
-			break
-		} else if tokenType == html.StartTagToken {
-			tagBytes, hasAttrs := tokenizer.TagName()
-			if string(tagBytes) == "a" && hasAttrs {
-				linkURL := extractDownloadLinkURL(tokenizer)
-				if linkURL != "" {
-					return linkURL
-				}
-			}
+func extractNextHref(links []LinkElement) string {
+	for _, each := range links {
+		if each.Rel == "next" {
+			return each.Href
 		}
 	}
-
-	return ""
-}
-
-func extractDownloadLinkURL(tokenizer *html.Tokenizer) string {
-	more := true
-	href := ""
-	isDownload := false
-	for more {
-		key, bytes, theresMore := tokenizer.TagAttr()
-		more = theresMore
-		if string(key) == "href" {
-			href = string(bytes)
-			if isDownload {
-				return href
-			}
-		}
-		if string(key) == "class" {
-			classes := strings.Split(string(bytes), " ")
-			for _, each := range classes {
-				if each == "" {
-					continue
-				}
-				if each == "dev-page-download" {
-					if href != "" {
-						return href
-					}
-					isDownload = true
-				}
-			}
-		}
-	}
-
 	return ""
 }

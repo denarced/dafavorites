@@ -2,11 +2,7 @@ module github.com/denarced/dafavorites
 
 go 1.18
 
-require (
-	github.com/MarvinJWendt/testza v0.5.2
-	github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883
-	golang.org/x/net v0.25.0
-)
+require github.com/MarvinJWendt/testza v0.5.2
 
 require (
 	atomicgo.dev/assert v0.0.2 // indirect

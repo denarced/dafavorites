@@ -4,9 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"io/ioutil"
 	"log"
@@ -82,37 +79,35 @@ type DownloadParams struct {
 	Filename string
 }
 
-// Download file params.URL with params as a specification. If the file's size
-// is <=minSize, don't save the file and return ("", size).
-// Return the downloaded file's filepath and size in bytes.
-func downloadImages(params DownloadParams, minSize int64) (string, int64) {
+// Download file params.URL with params as a specification.
+// Return the downloaded file's filepath.
+func downloadImages(params DownloadParams) string {
 	fpath := filepath.Join(params.Dirname, params.UUID, params.Filename)
 	if params.DryRun {
 		infoLogger.Println("Dry run: skip download of ", fpath)
-		return "", 0
+		return ""
 	}
 	dirpath := filepath.Join(params.Dirname, params.UUID)
-	err := os.MkdirAll(dirpath, 0700)
-	if err != nil {
+	if err := os.MkdirAll(dirpath, 0700); err != nil {
 		errorLogger.Printf(
 			"Failed to create path. Path: %s. Error: %v.\n",
 			dirpath,
 			err)
-		return "", 0
+		return ""
 	}
 
 	src, err := params.Client.Get(params.URL)
 	if err != nil {
 		errorLogger.Println("Failed to fetch image:", err)
-		return "", 0
+		return ""
 	}
 	defer src.Body.Close()
 
 	imageBytes, err := ioutil.ReadAll(src.Body)
 	imageSize := int64(len(imageBytes))
-	infoLogger.Printf("Image's size: %d. Min size: %d.\n", imageSize, minSize)
-	if imageSize <= minSize {
-		return "", imageSize
+	infoLogger.Printf("Image's size: %d.\n", imageSize)
+	if imageSize <= 0 {
+		return ""
 	}
 
 	dest, err := os.Create(fpath)
@@ -121,7 +116,7 @@ func downloadImages(params DownloadParams, minSize int64) (string, int64) {
 			"Failed to create image file. Filepath: %v. Error: %v.\n",
 			fpath,
 			err)
-		return "", 0
+		return ""
 	}
 	defer dest.Close()
 	defer infoLogger.Println("Deviation downloaded:", fpath)
@@ -131,18 +126,18 @@ func downloadImages(params DownloadParams, minSize int64) (string, int64) {
 		errorLogger.Println("Failed to copy image to file from", fpath)
 		errorLogger.Println("Count of bytes copied:", byteCount)
 		errorLogger.Println("Error:", err)
-		return "", 0
+		return ""
 	}
 
-	return fpath, int64(byteCount)
+	return fpath
 }
 
 func deriveFilename(prefix, url string) string {
 	pieces := strings.Split(url, "/")
-	// e.g. image.jpg?token=blaablaa or
+	// E.g. image.jpg?token=blaablaa or
 	//      image.jpg
 	withExtra := pieces[len(pieces)-1]
-	// e.g. [image.jpg token=blaablaa] or
+	// E.g. [image.jpg token=blaablaa] or
 	//      [image.jpg]
 	extraPieces := strings.Split(withExtra, "?")
 	separator := "_"
@@ -150,6 +145,15 @@ func deriveFilename(prefix, url string) string {
 		separator = ""
 	}
 	return prefix + separator + extraPieces[0]
+}
+
+func fetchAndReadRss(url string) (deviantart.RssFile, error) {
+	resp, err := fetchRssFile(url)
+	if err != nil {
+		return deviantart.RssFile{}, err
+	}
+	defer resp.Body.Close()
+	return deviantart.ToRssFile(resp.Body)
 }
 
 // Fetch RSS files and pass the deviations to be downloaded. The RSSs are
@@ -162,12 +166,7 @@ func fetchRss(
 	defer close(finished)
 
 	url := strings.Replace(baseRss, "___usern___", username, 1)
-	resp, err := fetchRssFile(url)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	rssFile, err := deviantart.ToRssFile(resp.Body)
+	rssFile, err := fetchAndReadRss(url)
 	if err != nil {
 		return
 	}
@@ -176,18 +175,12 @@ func fetchRss(
 		for _, each := range rssFile.RssItems {
 			rssItemChan <- each
 		}
-
 		// Fetch more deviations if there are some
 		if len(rssFile.NextURL) == 0 {
 			break
 		}
 
-		resp, err = fetchRssFile(rssFile.NextURL)
-		if err != nil {
-			return
-		}
-		defer resp.Body.Close()
-		rssFile, err = deviantart.ToRssFile(resp.Body)
+		rssFile, err = fetchAndReadRss(rssFile.NextURL)
 		if err != nil {
 			return
 		}
@@ -250,80 +243,12 @@ func saveDeviations(
 			Filename: filename,
 		}
 		infoLogger.Printf("Worker %d: download image\n", id)
-		filep, size := downloadImages(params, 0)
+		filep := downloadImages(params)
 		if len(filep) == 0 {
 			// Nothing to be done if the download failed as the error should
 			// have been reported by the called function.
 			continue
 		}
-		savedDeviationChan <- SavedDeviation{
-			RssItem:  each,
-			Filename: filep,
-		}
-
-		if dryRun {
-			continue
-		}
-
-		infoLogger.Printf("Worker %d: derive URL\n", id)
-		resolvedURL, err := deriveURL(each.Link)
-		if err != nil {
-			errorLogger.Printf("Failed derive URL %s: %v\n", each.Link, err)
-			continue
-		}
-		infoLogger.Printf("Worker %d: create request for HTML page\n", id)
-		pageReq, err := http.NewRequest("GET", resolvedURL, nil)
-		if err != nil {
-			errorLogger.Printf(
-				"Failed to create GET request for HTML page "+
-					"with URL %s resolved from %s: %v\n",
-				resolvedURL,
-				each.Link,
-				err)
-			continue
-		}
-		ageGateCookie := http.Cookie{
-			Name:    "agegate_state",
-			Value:   "1",
-			Domain:  ".deviantart.com",
-			Expires: time.Now().Add(time.Hour),
-			Path:    "/",
-		}
-		infoLogger.Printf("Worker %d: cookie created: %v\n", id, ageGateCookie)
-		pageReq.AddCookie(&ageGateCookie)
-		infoLogger.Printf("Worker %d: fetch HTML page\n", id)
-		response, err := client.Do(pageReq)
-		if err != nil {
-			errorLogger.Printf(
-				"Failed to fetch HTML from URL %s that was derived from %s\n",
-				resolvedURL,
-				each.Link)
-			continue
-		}
-		defer response.Body.Close()
-		infoLogger.Printf("Worker %d: extract download URL\n", id)
-		dlURL := deviantart.ExtractDownloadURL(response.Body)
-		if dlURL == "" {
-			infoLogger.Printf("Worker %d: URL extraction failed\n", id)
-			continue
-		}
-
-		dlParams := params
-		dlParams.URL = dlURL
-		dlParams.Filename = "large_" + filename
-		infoLogger.Printf("Worker %d: download large image\n", id)
-		// No point in even saving an image that's the same size or smaller
-		filep, _ = downloadImages(dlParams, size)
-		if filep == "" {
-			infoLogger.Printf(
-				"Worker %d: large download failed or image wasn't larger\n",
-				id)
-			continue
-		}
-		each.URL = dlURL
-		dimensions := extractDimensions(filep)
-		each.Dimensions = dimensions
-
 		savedDeviationChan <- SavedDeviation{
 			RssItem:  each,
 			Filename: filep,
@@ -339,30 +264,6 @@ func deriveURL(url string) (string, error) {
 		return "", err
 	}
 	return res.Request.URL.String(), nil
-}
-
-func extractDimensions(filep string) (dimensions deviantart.Dimensions) {
-	reader, err := os.Open(filep)
-	if err != nil {
-		errorLogger.Printf(
-			"Error opening image (%s): %s. Leaving dimensions to zeros.",
-			filep,
-			err)
-		return
-	}
-
-	img, _, err := image.DecodeConfig(reader)
-	if err != nil {
-		errorLogger.Printf(
-			"Error decoding image (%s): %s\n",
-			filep,
-			err)
-		return
-	}
-
-	dimensions.Width = img.Width
-	dimensions.Height = img.Height
-	return
 }
 
 // Collected downloaded deviations into a single DeviantFetch. The deviations
@@ -448,6 +349,7 @@ func main() {
 	if len(args) < 1 {
 		fmt.Println("Missing username")
 		fmt.Printf("Usage: %s {username}\n", os.Args[0])
+		os.Exit(4)
 		return
 	}
 
