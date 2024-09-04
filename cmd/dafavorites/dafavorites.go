@@ -27,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	shared.Logger.Info("Create temporary directory.")
+	shared.Logger.Debug("Create temporary directory.")
 	dirpath, err := os.MkdirTemp("", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to create a temporary directory.")
@@ -44,5 +44,6 @@ func main() {
 		shared.Logger.Error("Done, failed.", "error", err)
 		os.Exit(3)
 	}
+	fmt.Printf("Done. Deviations download to %s.\n", dirpath)
 	shared.Logger.Info("Done.")
 }

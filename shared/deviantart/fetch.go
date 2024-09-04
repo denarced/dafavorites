@@ -138,7 +138,7 @@ type downloadParams struct {
 func downloadImages(params downloadParams) string {
 	fpath := filepath.Join(params.dirname, params.uuid, params.filename)
 	if params.dryRun {
-		shared.Logger.Info("Dry run: skip download.", "filepath", fpath)
+		shared.Logger.Debug("Dry run: skip download.", "filepath", fpath)
 		return ""
 	}
 	dirpath := filepath.Join(params.dirname, params.uuid)
@@ -156,7 +156,7 @@ func downloadImages(params downloadParams) string {
 
 	imageBytes, err := io.ReadAll(src.Body)
 	imageSize := int64(len(imageBytes))
-	shared.Logger.Info("Fetched image.", "filepath", fpath, "size", imageSize)
+	shared.Logger.Debug("Fetched image.", "filepath", fpath, "size", imageSize)
 	if imageSize <= 0 {
 		return ""
 	}
@@ -167,7 +167,7 @@ func downloadImages(params downloadParams) string {
 		return ""
 	}
 	defer dest.Close()
-	defer shared.Logger.Info("Deviation downloaded.", "filepath", fpath)
+	defer shared.Logger.Debug("Deviation downloaded.", "filepath", fpath)
 
 	byteCount, err := dest.Write(imageBytes)
 	if err != nil {
@@ -242,11 +242,12 @@ func fetchRss(
 }
 
 func fetchRssFile(url string) (resp *http.Response, err error) {
-	shared.Logger.Info("About to fetch RSS file.", "url", url)
+	shared.Logger.Debug("About to fetch RSS file.", "url", url)
 	resp, err = http.Get(url)
 	if err != nil {
 		shared.Logger.Error("Failed to fetch RSS file.", "error", err)
 	}
+	shared.Logger.Info("RSS file fetched.", "url", url)
 	return
 }
 
@@ -267,20 +268,20 @@ func saveDeviations(
 ) {
 	defer waitGroup.Done()
 
-	shared.Logger.Info("Starting download worker.", "ID", id)
+	shared.Logger.Debug("Starting download worker.", "ID", id)
 	for each := range rssItemChan {
-		shared.Logger.Info(
+		shared.Logger.Debug(
 			"Worker about to start downloading.",
 			"id",
 			id,
 			"url",
 			each.URL)
-		shared.Logger.Info("Worker: create cookie jar.", "id", id)
+		shared.Logger.Debug("Worker: create cookie jar.", "id", id)
 		cookieJar, _ := cookiejar.New(nil)
 		client := &http.Client{
 			Jar: cookieJar,
 		}
-		shared.Logger.Info("Worker: create UUID.", "id", id)
+		shared.Logger.Debug("Worker: create UUID.", "id", id)
 		uuid, err := newUUID()
 		if err != nil {
 			shared.Logger.Error("UUID generation failed.", "url", each.URL, "error", err)
@@ -295,7 +296,7 @@ func saveDeviations(
 			uuid:     uuid,
 			filename: filename,
 		}
-		shared.Logger.Info("Worker: download image.", "id", id, "url", params.url)
+		shared.Logger.Debug("Worker: download image.", "id", id, "url", params.url)
 		filep := downloadImages(params)
 		if len(filep) == 0 {
 			// Nothing to be done if the download failed as the error should
