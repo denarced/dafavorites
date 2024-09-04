@@ -2,33 +2,27 @@ package deviantart
 
 import (
 	"bytes"
-	"io/ioutil"
+	"os"
 	"testing"
 
-	"github.com/MarvinJWendt/testza"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestToRssFile(t *testing.T) {
 	// SETUP SUT
-	rssBytes, err := ioutil.ReadFile("testdata/rss.xml")
-	testza.AssertNil(t, err)
+	rssBytes, err := os.ReadFile("testdata/rss.xml")
+	req := assert.New(t)
+	req.Nil(err)
 
 	// EXERCISE
 	rssFile, err := ToRssFile(bytes.NewReader(rssBytes))
 
 	// VERIFY
-	testza.AssertNil(t, err, "Error received from ToRssFile.")
-	testza.AssertEqual(
-		t,
-		60,
-		len(rssFile.RssItems), "Unexpected count of RssItems.")
+	req.Nil(err, "Error received from ToRssFile.")
+	req.Equal(60, len(rssFile.RssItems), "Unexpected count of RssItems.")
 	expectedNextURL := "https://backend.deviantart.com/rss.xml?" +
 		"type=deviation&offset=120&q=favedbyid%3A4471416&order=9"
-	testza.AssertEqual(
-		t,
-		expectedNextURL,
-		rssFile.NextURL,
-		"Unexpected NextURL.")
+	req.Equal(expectedNextURL, rssFile.NextURL, "Unexpected NextURL.")
 
 	expectedFirstItem := RssItem{
 		Title:           "Leya",
@@ -44,11 +38,7 @@ func TestToRssFile(t *testing.T) {
 		},
 	}
 	actualFirstItem := rssFile.RssItems[0]
-	testza.AssertEqual(
-		t,
-		expectedFirstItem,
-		actualFirstItem,
-		"Mismatched first RSS item.")
+	req.Equal(expectedFirstItem, actualFirstItem, "Mismatched first RSS item.")
 
 	expectedLastItem := RssItem{
 		Title: "double fluo",
@@ -66,9 +56,5 @@ func TestToRssFile(t *testing.T) {
 		},
 	}
 	actualLastItem := rssFile.RssItems[len(rssFile.RssItems)-1]
-	testza.AssertEqual(
-		t,
-		expectedLastItem,
-		actualLastItem,
-		"Mismatched last RSS item.")
+	req.Equal(expectedLastItem, actualLastItem, "Mismatched last RSS item.")
 }

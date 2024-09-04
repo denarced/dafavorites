@@ -3,13 +3,13 @@ package main
 import (
 	"testing"
 
-	"github.com/MarvinJWendt/testza"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDeriveFilename(t *testing.T) {
 	run := func(name, prefix, url, expected string) {
 		t.Run(name, func(t *testing.T) {
-			testza.AssertEqual(t, expected, deriveFilename(prefix, url))
+			assert.Equal(t, expected, deriveFilename(prefix, url))
 		})
 	}
 
