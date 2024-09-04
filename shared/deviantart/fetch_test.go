@@ -20,10 +20,10 @@ func TestToRssFile(t *testing.T) {
 
 	// VERIFY
 	req.Nil(err, "Error received from toRssFile.")
-	req.Equal(60, len(rssFile.RssItems), "Unexpected count of RssItems.")
+	req.Equal(60, len(rssFile.rssItems), "Unexpected count of RssItems.")
 	expectedNextURL := "https://backend.deviantart.com/rss.xml?" +
 		"type=deviation&offset=120&q=favedbyid%3A4471416&order=9"
-	req.Equal(expectedNextURL, rssFile.NextURL, "Unexpected NextURL.")
+	req.Equal(expectedNextURL, rssFile.nextURL, "Unexpected NextURL.")
 
 	expectedFirstItem := djson.RssItem{
 		Title:           "Leya",
@@ -38,7 +38,7 @@ func TestToRssFile(t *testing.T) {
 			Height: 1095,
 		},
 	}
-	actualFirstItem := rssFile.RssItems[0]
+	actualFirstItem := rssFile.rssItems[0]
 	req.Equal(expectedFirstItem, actualFirstItem, "Mismatched first RSS item.")
 
 	expectedLastItem := djson.RssItem{
@@ -56,7 +56,7 @@ func TestToRssFile(t *testing.T) {
 			Height: 750,
 		},
 	}
-	actualLastItem := rssFile.RssItems[len(rssFile.RssItems)-1]
+	actualLastItem := rssFile.rssItems[len(rssFile.rssItems)-1]
 	req.Equal(expectedLastItem, actualLastItem, "Mismatched last RSS item.")
 }
 

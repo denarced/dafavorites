@@ -27,8 +27,8 @@ const (
 
 // RssFile is the items of the one Deviant Art RSS file and the next one's URL
 type rssFile struct {
-	NextURL  string
-	RssItems []djson.RssItem
+	nextURL  string
+	rssItems []djson.RssItem
 }
 
 // Convert deviant art structures to our own
@@ -81,8 +81,8 @@ func toRssFile(reader io.Reader) (rssFile, error) {
 	rssItems := itemElementsToItems(rssElement.Channel.RssItems)
 
 	return rssFile{
-		NextURL:  extractNextHref(rssElement.Channel.Links),
-		RssItems: rssItems,
+		nextURL:  extractNextHref(rssElement.Channel.Links),
+		rssItems: rssItems,
 	}, nil
 }
 
@@ -120,28 +120,28 @@ func newUUID() (string, error) {
 // DownloadParams for downloading images from deviant art.
 type downloadParams struct {
 	// Client to use to download the image. Must not be null.
-	Client *http.Client
+	client *http.Client
 	// Dirname is the root dir into which images are downloaded.
-	Dirname string
+	dirname string
 	// URL for the image to download.
-	URL string
+	url string
 	// Don't actually download anything when true.
-	DryRun bool
+	dryRun bool
 	// UUID to act as a sub dir under Dirname.
-	UUID string
-	// Filename for the image
-	Filename string
+	uuid string
+	// Filename for the image.
+	filename string
 }
 
-// Download file params.URL with params as a specification.
+// Download file params.url with params as a specification.
 // Return the downloaded file's filepath.
 func downloadImages(params downloadParams) string {
-	fpath := filepath.Join(params.Dirname, params.UUID, params.Filename)
-	if params.DryRun {
+	fpath := filepath.Join(params.dirname, params.uuid, params.filename)
+	if params.dryRun {
 		shared.InfoLogger.Println("Dry run: skip download of ", fpath)
 		return ""
 	}
-	dirpath := filepath.Join(params.Dirname, params.UUID)
+	dirpath := filepath.Join(params.dirname, params.uuid)
 	if err := os.MkdirAll(dirpath, 0700); err != nil {
 		shared.ErrorLogger.Printf(
 			"Failed to create path. Path: %s. Error: %v.\n",
@@ -150,7 +150,7 @@ func downloadImages(params downloadParams) string {
 		return ""
 	}
 
-	src, err := params.Client.Get(params.URL)
+	src, err := params.client.Get(params.url)
 	if err != nil {
 		shared.ErrorLogger.Println("Failed to fetch image:", err)
 		return ""
@@ -226,15 +226,15 @@ func fetchRss(
 	}
 	for {
 		// Pass favorite deviations to be downloaded
-		for _, each := range rssFile.RssItems {
+		for _, each := range rssFile.rssItems {
 			rssItemChan <- each
 		}
 		// Fetch more deviations if there are some
-		if len(rssFile.NextURL) == 0 {
+		if len(rssFile.nextURL) == 0 {
 			break
 		}
 
-		rssFile, err = fetchAndReadRss(rssFile.NextURL)
+		rssFile, err = fetchAndReadRss(rssFile.nextURL)
 		if err != nil {
 			return
 		}
@@ -289,12 +289,12 @@ func saveDeviations(
 		}
 		filename := deriveFilename("", each.URL)
 		params := downloadParams{
-			Client:   client,
-			Dirname:  dirpath,
-			URL:      each.URL,
-			DryRun:   dryRun,
-			UUID:     uuid,
-			Filename: filename,
+			client:   client,
+			dirname:  dirpath,
+			url:      each.URL,
+			dryRun:   dryRun,
+			uuid:     uuid,
+			filename: filename,
 		}
 		shared.InfoLogger.Printf("Worker %d: download image\n", id)
 		filep := downloadImages(params)
