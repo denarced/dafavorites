@@ -1,3 +1,4 @@
+// Package main.
 package main
 
 import (
@@ -6,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -16,17 +16,12 @@ import (
 	"time"
 
 	"github.com/denarced/dafavorites/shared/deviantart"
+	"github.com/denarced/dafavorites/shared/shared"
 )
 
 const (
 	baseRss = "http://backend.deviantart.com/rss.xml" +
 		"?q=favby%3A___usern___&type=deviation"
-	logFlags = log.LstdFlags | log.Lshortfile
-)
-
-var (
-	infoLogger  = log.New(os.Stdout, "INFO ", logFlags)
-	errorLogger = log.New(os.Stderr, "ERROR ", logFlags)
 )
 
 // SavedDeviation is a single saved deviation
@@ -47,7 +42,7 @@ func NewUUID() (string, error) {
 	uuid := make([]byte, 16)
 	n, err := io.ReadFull(rand.Reader, uuid)
 	if n != len(uuid) || err != nil {
-		errorLogger.Println("UUID generation failed:", err)
+		shared.ErrorLogger.Println("UUID generation failed:", err)
 		return "", err
 	}
 	// variant bits; see section 4.1.1
@@ -84,12 +79,12 @@ type DownloadParams struct {
 func downloadImages(params DownloadParams) string {
 	fpath := filepath.Join(params.Dirname, params.UUID, params.Filename)
 	if params.DryRun {
-		infoLogger.Println("Dry run: skip download of ", fpath)
+		shared.InfoLogger.Println("Dry run: skip download of ", fpath)
 		return ""
 	}
 	dirpath := filepath.Join(params.Dirname, params.UUID)
 	if err := os.MkdirAll(dirpath, 0700); err != nil {
-		errorLogger.Printf(
+		shared.ErrorLogger.Printf(
 			"Failed to create path. Path: %s. Error: %v.\n",
 			dirpath,
 			err)
@@ -98,34 +93,34 @@ func downloadImages(params DownloadParams) string {
 
 	src, err := params.Client.Get(params.URL)
 	if err != nil {
-		errorLogger.Println("Failed to fetch image:", err)
+		shared.ErrorLogger.Println("Failed to fetch image:", err)
 		return ""
 	}
 	defer src.Body.Close()
 
-	imageBytes, err := ioutil.ReadAll(src.Body)
+	imageBytes, err := io.ReadAll(src.Body)
 	imageSize := int64(len(imageBytes))
-	infoLogger.Printf("Image's size: %d.\n", imageSize)
+	shared.InfoLogger.Printf("Image's size: %d.\n", imageSize)
 	if imageSize <= 0 {
 		return ""
 	}
 
 	dest, err := os.Create(fpath)
 	if err != nil {
-		errorLogger.Printf(
+		shared.ErrorLogger.Printf(
 			"Failed to create image file. Filepath: %v. Error: %v.\n",
 			fpath,
 			err)
 		return ""
 	}
 	defer dest.Close()
-	defer infoLogger.Println("Deviation downloaded:", fpath)
+	defer shared.InfoLogger.Println("Deviation downloaded:", fpath)
 
 	byteCount, err := dest.Write(imageBytes)
 	if err != nil {
-		errorLogger.Println("Failed to copy image to file from", fpath)
-		errorLogger.Println("Count of bytes copied:", byteCount)
-		errorLogger.Println("Error:", err)
+		shared.ErrorLogger.Println("Failed to copy image to file from", fpath)
+		shared.ErrorLogger.Println("Count of bytes copied:", byteCount)
+		shared.ErrorLogger.Println("Error:", err)
 		return ""
 	}
 
@@ -188,10 +183,10 @@ func fetchRss(
 }
 
 func fetchRssFile(url string) (resp *http.Response, err error) {
-	infoLogger.Println("Fetch RSS file:", url)
+	shared.InfoLogger.Println("Fetch RSS file:", url)
 	resp, err = http.Get(url)
 	if err != nil {
-		errorLogger.Println("Failed to fetch RSS file:", err)
+		shared.ErrorLogger.Println("Failed to fetch RSS file:", err)
 	}
 	return
 }
@@ -213,21 +208,21 @@ func saveDeviations(
 ) {
 	defer waitGroup.Done()
 
-	infoLogger.Println("Starting download worker", id)
+	shared.InfoLogger.Println("Starting download worker", id)
 	for each := range rssItemChan {
-		infoLogger.Printf(
+		shared.InfoLogger.Printf(
 			"Worker %d about to start downloading %s\n",
 			id,
 			each.URL)
-		infoLogger.Printf("Worker %d: create cookie jar\n", id)
+		shared.InfoLogger.Printf("Worker %d: create cookie jar\n", id)
 		cookieJar, _ := cookiejar.New(nil)
 		client := &http.Client{
 			Jar: cookieJar,
 		}
-		infoLogger.Printf("Worker %d: create UUID\n", id)
+		shared.InfoLogger.Printf("Worker %d: create UUID\n", id)
 		uuid, err := NewUUID()
 		if err != nil {
-			errorLogger.Printf(
+			shared.ErrorLogger.Printf(
 				"UUID generation error when working with %s: %v\n",
 				each.URL,
 				err)
@@ -242,7 +237,7 @@ func saveDeviations(
 			UUID:     uuid,
 			Filename: filename,
 		}
-		infoLogger.Printf("Worker %d: download image\n", id)
+		shared.InfoLogger.Printf("Worker %d: download image\n", id)
 		filep := downloadImages(params)
 		if len(filep) == 0 {
 			// Nothing to be done if the download failed as the error should
@@ -255,7 +250,7 @@ func saveDeviations(
 		}
 	}
 
-	infoLogger.Println("Quitting download worker", id)
+	shared.InfoLogger.Println("Quitting download worker", id)
 }
 
 func deriveURL(url string) (string, error) {
@@ -275,7 +270,7 @@ func collectSavedDeviations(
 ) {
 	var deviations []SavedDeviation
 	for each := range savedDeviationChan {
-		infoLogger.Println(
+		shared.InfoLogger.Println(
 			"Deviation has arrived to be collected:",
 			each.Filename)
 		deviations = append(deviations, each)
@@ -314,13 +309,13 @@ func fetchFavorites(username, dirpath string, dlWorkerCount int) DeviantFetch {
 
 	// Wait until RSS downloads have finished
 	<-rssFinished
-	infoLogger.Println("Go routine for fetching RSS files has finished.")
+	shared.InfoLogger.Println("Go routine for fetching RSS files has finished.")
 	// Close RSS channel in order to signal to downloaders that there's no more
 	// jobs coming.
 	close(rssItemChan)
 	// Wait for the downloaders to finish
 	dlWaitGroup.Wait()
-	infoLogger.Println("All downloaders have finished.")
+	shared.InfoLogger.Println("All downloaders have finished.")
 	// Downloaders finished so close chan so that collector stops waiting
 	close(savedDeviationChan)
 	// And finally get information on all favorite deviations from collector
@@ -331,13 +326,13 @@ func fetchFavorites(username, dirpath string, dlWorkerCount int) DeviantFetch {
 func saveJSON(deviantFetch DeviantFetch, filename string) error {
 	jsonBytes, err := json.Marshal(deviantFetch)
 	if err != nil {
-		errorLogger.Println("Conversion to json failed:", err)
+		shared.ErrorLogger.Println("Conversion to json failed:", err)
 		return err
 	}
 
 	err = ioutil.WriteFile(filename, jsonBytes, 0644)
 	if err != nil {
-		errorLogger.Println("Error writing JSON:", err)
+		shared.ErrorLogger.Println("Error writing JSON:", err)
 		return err
 	}
 
@@ -368,7 +363,7 @@ func main() {
 	}
 
 	deviantFetch := fetchFavorites(username, dirpath, 4)
-	infoLogger.Println("Deviations fetched.")
+	shared.InfoLogger.Println("Deviations fetched.")
 	err = saveJSON(deviantFetch, "deviantFetch.json")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed.")
