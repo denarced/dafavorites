@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	djson "github.com/denarced/dafavorites/shared/deviantart/json"
+	"github.com/denarced/dafavorites/shared/shared"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestToRssFile(t *testing.T) {
 	// SETUP SUT
+	shared.InitTestLogging(t)
 	rssBytes, err := os.ReadFile("testdata/rss.xml")
 	req := assert.New(t)
 	req.Nil(err)
@@ -63,6 +65,7 @@ func TestToRssFile(t *testing.T) {
 func TestDeriveFilename(t *testing.T) {
 	run := func(name, prefix, url, expected string) {
 		t.Run(name, func(t *testing.T) {
+			shared.InitTestLogging(t)
 			assert.Equal(t, expected, deriveFilename(prefix, url))
 		})
 	}

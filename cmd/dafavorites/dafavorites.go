@@ -11,6 +11,8 @@ import (
 )
 
 func main() {
+	shared.InitLogging()
+	shared.Logger.Info("Start.", "args", os.Args)
 	args := os.Args[1:]
 	if len(args) < 1 {
 		fmt.Println("Missing username")
@@ -25,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Create temporary directory")
+	shared.Logger.Info("Create temporary directory.")
 	dirpath, err := os.MkdirTemp("", "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to create a temporary directory.")
@@ -34,11 +36,13 @@ func main() {
 	}
 
 	deviantFetch := deviantart.FetchFavorites(username, dirpath, 4)
-	shared.InfoLogger.Println("Deviations fetched.")
+	shared.Logger.Info("Deviations fetched.", "count", len(deviantFetch.SavedDeviations))
 	err = deviantart.SaveJSON(deviantFetch, "deviantFetch.json")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed.")
 		fmt.Fprintln(os.Stderr, err)
+		shared.Logger.Error("Done, failed.", "error", err)
 		os.Exit(3)
 	}
+	shared.Logger.Info("Done.")
 }

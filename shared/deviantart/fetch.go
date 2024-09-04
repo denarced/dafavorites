@@ -69,13 +69,13 @@ func extractAuthor(credits []dxml.ItemCreditElement) string {
 func toRssFile(reader io.Reader) (rssFile, error) {
 	contentBytes, err := io.ReadAll(reader)
 	if err != nil {
-		shared.ErrorLogger.Println("Failed to read fetched rss file:", err)
+		shared.Logger.Error("Failed to read fetched rss file.", "error", err)
 		return rssFile{}, err
 	}
 
 	rssElement := dxml.RssElement{}
 	if err = xml.Unmarshal(contentBytes, &rssElement); err != nil {
-		shared.ErrorLogger.Println("Failed to unmarshal XML:", err)
+		shared.Logger.Error("Failed to unmarshal XML.", "error", err)
 		return rssFile{}, err
 	}
 	rssItems := itemElementsToItems(rssElement.Channel.RssItems)
@@ -101,7 +101,7 @@ func newUUID() (string, error) {
 	uuid := make([]byte, 16)
 	n, err := io.ReadFull(rand.Reader, uuid)
 	if n != len(uuid) || err != nil {
-		shared.ErrorLogger.Println("UUID generation failed:", err)
+		shared.Logger.Error("UUID generation failed.", "error", err)
 		return "", err
 	}
 	// variant bits; see section 4.1.1
@@ -138,48 +138,48 @@ type downloadParams struct {
 func downloadImages(params downloadParams) string {
 	fpath := filepath.Join(params.dirname, params.uuid, params.filename)
 	if params.dryRun {
-		shared.InfoLogger.Println("Dry run: skip download of ", fpath)
+		shared.Logger.Info("Dry run: skip download.", "filepath", fpath)
 		return ""
 	}
 	dirpath := filepath.Join(params.dirname, params.uuid)
 	if err := os.MkdirAll(dirpath, 0700); err != nil {
-		shared.ErrorLogger.Printf(
-			"Failed to create path. Path: %s. Error: %v.\n",
-			dirpath,
-			err)
+		shared.Logger.Error("Failed to create path.", "dirpath", dirpath, "error", err)
 		return ""
 	}
 
 	src, err := params.client.Get(params.url)
 	if err != nil {
-		shared.ErrorLogger.Println("Failed to fetch image:", err)
+		shared.Logger.Error("Failed to fetch image.", "error", err)
 		return ""
 	}
 	defer src.Body.Close()
 
 	imageBytes, err := io.ReadAll(src.Body)
 	imageSize := int64(len(imageBytes))
-	shared.InfoLogger.Printf("Image's size: %d.\n", imageSize)
+	shared.Logger.Info("Fetched image.", "filepath", fpath, "size", imageSize)
 	if imageSize <= 0 {
 		return ""
 	}
 
 	dest, err := os.Create(fpath)
 	if err != nil {
-		shared.ErrorLogger.Printf(
-			"Failed to create image file. Filepath: %v. Error: %v.\n",
-			fpath,
-			err)
+		shared.Logger.Error("Failed to create image file.", "filepath", fpath, "error", err)
 		return ""
 	}
 	defer dest.Close()
-	defer shared.InfoLogger.Println("Deviation downloaded:", fpath)
+	defer shared.Logger.Info("Deviation downloaded.", "filepath", fpath)
 
 	byteCount, err := dest.Write(imageBytes)
 	if err != nil {
-		shared.ErrorLogger.Println("Failed to copy image to file from", fpath)
-		shared.ErrorLogger.Println("Count of bytes copied:", byteCount)
-		shared.ErrorLogger.Println("Error:", err)
+		shared.Logger.Error(
+			"Failed to copy image to file.",
+			"filepath",
+			fpath,
+			"byte count",
+			byteCount,
+			"error",
+			err,
+		)
 		return ""
 	}
 
@@ -242,10 +242,10 @@ func fetchRss(
 }
 
 func fetchRssFile(url string) (resp *http.Response, err error) {
-	shared.InfoLogger.Println("Fetch RSS file:", url)
+	shared.Logger.Info("About to fetch RSS file.", "url", url)
 	resp, err = http.Get(url)
 	if err != nil {
-		shared.ErrorLogger.Println("Failed to fetch RSS file:", err)
+		shared.Logger.Error("Failed to fetch RSS file.", "error", err)
 	}
 	return
 }
@@ -267,24 +267,23 @@ func saveDeviations(
 ) {
 	defer waitGroup.Done()
 
-	shared.InfoLogger.Println("Starting download worker", id)
+	shared.Logger.Info("Starting download worker.", "ID", id)
 	for each := range rssItemChan {
-		shared.InfoLogger.Printf(
-			"Worker %d about to start downloading %s\n",
+		shared.Logger.Info(
+			"Worker about to start downloading.",
+			"id",
 			id,
+			"url",
 			each.URL)
-		shared.InfoLogger.Printf("Worker %d: create cookie jar\n", id)
+		shared.Logger.Info("Worker: create cookie jar.", "id", id)
 		cookieJar, _ := cookiejar.New(nil)
 		client := &http.Client{
 			Jar: cookieJar,
 		}
-		shared.InfoLogger.Printf("Worker %d: create UUID\n", id)
+		shared.Logger.Info("Worker: create UUID.", "id", id)
 		uuid, err := newUUID()
 		if err != nil {
-			shared.ErrorLogger.Printf(
-				"UUID generation error when working with %s: %v\n",
-				each.URL,
-				err)
+			shared.Logger.Error("UUID generation failed.", "url", each.URL, "error", err)
 			continue
 		}
 		filename := deriveFilename("", each.URL)
@@ -296,7 +295,7 @@ func saveDeviations(
 			uuid:     uuid,
 			filename: filename,
 		}
-		shared.InfoLogger.Printf("Worker %d: download image\n", id)
+		shared.Logger.Info("Worker: download image.", "id", id, "url", params.url)
 		filep := downloadImages(params)
 		if len(filep) == 0 {
 			// Nothing to be done if the download failed as the error should
@@ -309,7 +308,7 @@ func saveDeviations(
 		}
 	}
 
-	shared.InfoLogger.Println("Quitting download worker", id)
+	shared.Logger.Info("Quitting download worker.", "id", id)
 }
 
 func deriveURL(url string) (string, error) {
@@ -329,9 +328,7 @@ func collectSavedDeviations(
 ) {
 	var deviations []djson.SavedDeviation
 	for each := range savedDeviationChan {
-		shared.InfoLogger.Println(
-			"Deviation has arrived to be collected:",
-			each.Filename)
+		shared.Logger.Info("Deviation has arrived to be collected.", "filename", each.Filename)
 		deviations = append(deviations, each)
 	}
 	deviantFetchChan <- djson.DeviantFetch{
@@ -368,13 +365,13 @@ func FetchFavorites(username, dirpath string, dlWorkerCount int) djson.DeviantFe
 
 	// Wait until RSS downloads have finished
 	<-rssFinished
-	shared.InfoLogger.Println("Go routine for fetching RSS files has finished.")
+	shared.Logger.Info("Go routine for fetching RSS files has finished.")
 	// Close RSS channel in order to signal to downloaders that there's no more
 	// jobs coming.
 	close(rssItemChan)
 	// Wait for the downloaders to finish
 	dlWaitGroup.Wait()
-	shared.InfoLogger.Println("All downloaders have finished.")
+	shared.Logger.Info("All downloaders have finished.")
 	// Downloaders finished so close chan so that collector stops waiting
 	close(savedDeviationChan)
 	// And finally get information on all favorite deviations from collector
@@ -385,13 +382,13 @@ func FetchFavorites(username, dirpath string, dlWorkerCount int) djson.DeviantFe
 func SaveJSON(deviantFetch djson.DeviantFetch, filename string) error {
 	jsonBytes, err := json.Marshal(deviantFetch)
 	if err != nil {
-		shared.ErrorLogger.Println("Conversion to json failed:", err)
+		shared.Logger.Error("Conversion to json failed.", "error", err)
 		return err
 	}
 
 	err = os.WriteFile(filename, jsonBytes, 0644)
 	if err != nil {
-		shared.ErrorLogger.Println("Error writing JSON:", err)
+		shared.Logger.Error("Error writing JSON.", "error", err)
 		return err
 	}
 
