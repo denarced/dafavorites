@@ -1,0 +1,17 @@
+flake8==7.1.0
+pylint==3.2.6
+pytest==8.3.2
+ruff==0.5.6
+
+astroid==3.2.4
+dill==0.3.8
+iniconfig==2.0.0
+isort==5.13.2
+libtmux==0.37.0
+mccabe==0.7.0
+packaging==24.1
+platformdirs==4.2.2
+pluggy==1.5.0
+pycodestyle==2.12.0
+pyflakes==3.2.0
+tomlkit==0.13.0
