@@ -2,146 +2,60 @@
 package deviantart
 
 import (
+	"crypto/rand"
+	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
+	djson "github.com/denarced/dafavorites/shared/deviantart/json"
+	dxml "github.com/denarced/dafavorites/shared/deviantart/xml"
 	"github.com/denarced/dafavorites/shared/shared"
 )
 
-// Dimensions of the deviation
-type Dimensions struct {
-	Width  int
-	Height int
-}
-
-// RssItem is a single <item> in deviant art RSS
-type RssItem struct {
-	// I.e. the name of the deviation
-	Title string
-	// URL to the deviation, usually identical to GUID
-	Link            string
-	GUID            string
-	PublicationDate string
-	Author          string
-	URL             string
-	Dimensions      Dimensions
-}
+const (
+	baseRss = "http://backend.deviantart.com/rss.xml" +
+		"?q=favby%3A___usern___&type=deviation"
+)
 
 // RssFile is the items of the one Deviant Art RSS file and the next one's URL
-type RssFile struct {
+type rssFile struct {
 	NextURL  string
-	RssItems []RssItem
-}
-
-// LinkElement is a URL to another Deviant Art RSS xml
-type LinkElement struct {
-	// Relation, e.g. "next". Each RSS xml contains x amount of favorite items
-	// and then the URL in "next" contains the next RSS xml that contains more.
-	Rel  string `xml:"rel,attr"`
-	Href string `xml:"href,attr"`
-}
-
-// ItemCreditElement is a credit element in Deviant Art RSS xml.
-// Example:
-//
-//	<media:credit role="author" scheme="urn:ebu">WojtekFus</media:credit>
-type ItemCreditElement struct {
-	Role  string `xml:"role,attr"`
-	Value string `xml:",chardata"`
-}
-
-// ItemContentElement in deviant art RSS xml.
-// Example:
-//
-//	<media:content
-//	    url="http://pre03.deviantart.net/bbec/th/pre/f/2015/347/b/f/model_no__th_x11_38_by_wojtekfus-d9k1rbm.jpg"
-//	    height="670"
-//	    width="1192"
-//	    medium="image"/>
-type ItemContentElement struct {
-	URL    string `xml:"url,attr"`
-	Width  int    `xml:"width,attr"`
-	Height int    `xml:"height,attr"`
-}
-
-// RssItemElement is a single <item> in deviant art RSS xml.
-// Contains information on any given favorite deviation.
-//
-// Example:
-//
-//	   <item>
-//		   <title>MODEL NO. TH-X11-38</title>
-//		   <link>http://wojtekfus.deviantart.com/art/MODEL-NO-TH-X11-38-577869970</link>
-//		   <guid isPermaLink="true">http://wojtekfus.deviantart.com/art/MODEL-NO-TH-X11-38-577869970</guid>
-//		   <pubDate>Sun, 13 Dec 2015 16:14:02 PST</pubDate>
-//		   <media:title type="plain">MODEL NO. TH-X11-38</media:title>
-//		   <media:keywords></media:keywords>
-//		   <media:rating>nonadult</media:rating>
-//		   <media:category label="Sci-Fi">digitalart/paintings/scifi</media:category>
-//		   <media:credit role="author" scheme="urn:ebu">WojtekFus</media:credit>
-//		   <media:credit role="author" scheme="urn:ebu">http://a.deviantart.net/avatars/w/o/wojtekfus.jpg?5</media:credit>
-//		   <media:copyright url="http://wojtekfus.deviantart.com">Copyright 2015 WojtekFus</media:copyright>
-//		   <media:description type="html">Image done for the workshop in Taipei that&#039;s going to happen next week:&amp;nbsp;&lt;a class=&quot;external&quot; href=&quot;http://www.deviantart.com/users/outgoing?http://www.likmeetup.com/&quot;&gt;www.likmeetup.com/&lt;/a&gt;&lt;br /&gt;&lt;br /&gt;Struggled with it a lot myself, but I&#039;m letting it go, haha &lt;img src=&quot;http://e.deviantart.net/emoticons/s/smile.gif&quot; width=&quot;15&quot; height=&quot;15&quot; alt=&quot;:)&quot; data-embed-type=&quot;emoticon&quot; data-embed-id=&quot;391&quot; title=&quot;:) (Smile)&quot;/&gt; Hope you like it! Love you guys!</media:description>            <media:thumbnail url="http://t02.deviantart.net/FeGyfpR_tb8vGcOarQm_dyvBd7U=/fit-in/150x150/filters:no_upscale():origin()/pre03/bbec/th/pre/f/2015/347/b/f/model_no__th_x11_38_by_wojtekfus-d9k1rbm.jpg" height="84" width="150"/>            <media:thumbnail url="http://t14.deviantart.net/BPI5k4O3FXvK1PF7VJXREIujS0I=/fit-in/300x900/filters:no_upscale():origin()/pre03/bbec/th/pre/f/2015/347/b/f/model_no__th_x11_38_by_wojtekfus-d9k1rbm.jpg" height="169" width="300"/>            <media:thumbnail url="http://t15.deviantart.net/ZS17sMYJv1Whk_q1lyP4DrvdH30=/300x200/filters:fixed_height(100,100):origin()/pre03/bbec/th/pre/f/2015/347/b/f/model_no__th_x11_38_by_wojtekfus-d9k1rbm.jpg" height="169" width="300"/>
-//		   <media:content url="http://pre03.deviantart.net/bbec/th/pre/f/2015/347/b/f/model_no__th_x11_38_by_wojtekfus-d9k1rbm.jpg" height="670" width="1192" medium="image"/>
-//		   <description>Image done for the workshop in Taipei that&#039;s going to happen next week:&amp;nbsp;&lt;a class=&quot;external&quot; href=&quot;http://www.deviantart.com/users/outgoing?http://www.likmeetup.com/&quot;&gt;www.likmeetup.com/&lt;/a&gt;&lt;br /&gt;&lt;br /&gt;Struggled with it a lot myself, but I&#039;m letting it go, haha &lt;img src=&quot;http://e.deviantart.net/emoticons/s/smile.gif&quot; width=&quot;15&quot; height=&quot;15&quot; alt=&quot;:)&quot; data-embed-type=&quot;emoticon&quot; data-embed-id=&quot;391&quot; title=&quot;:) (Smile)&quot;/&gt; Hope you like it! Love you guys!&lt;br /&gt;&lt;div&gt;&lt;img src=&quot;http://t15.deviantart.net/ZS17sMYJv1Whk_q1lyP4DrvdH30=/300x200/filters:fixed_height(100,100):origin()/pre03/bbec/th/pre/f/2015/347/b/f/model_no__th_x11_38_by_wojtekfus-d9k1rbm.jpg&quot; alt=&quot;thumbnail&quot; /&gt;&lt;/div&gt;</description>
-//	   </item>
-type RssItemElement struct {
-	Title           string              `xml:"title"`
-	Link            string              `xml:"link"`
-	GUID            string              `xml:"guid"`
-	PublicationDate string              `xml:"pubDate"`
-	URL             string              `xml:"url"`
-	Width           int                 `xml:"width"`
-	Height          int                 `xml:"height"`
-	Credits         []ItemCreditElement `xml:"credit"`
-	Content         ItemContentElement  `xml:"content"`
-}
-
-// ChannelElement is the single channel element in Deviant Art RSS xml
-// that's located inside the root rss element.
-type ChannelElement struct {
-	// The link elements. In this bunch we're mostly interested in the "next"
-	// links.
-	Links []LinkElement `xml:"link"`
-	// The actual item elements, each of which contains a single favorite
-	// deviation.
-	RssItems []RssItemElement `xml:"item"`
-}
-
-// RssElement is the root element of Deviant Art's RSS xml
-type RssElement struct {
-	XMLName xml.Name `xml:"rss"`
-	// The single channel element in the xml. At least no more than one hasn't
-	// been seen during development.
-	Channel ChannelElement `xml:"channel"`
+	RssItems []djson.RssItem
 }
 
 // Convert deviant art structures to our own
-func itemElementsToItems(elements []RssItemElement) []RssItem {
+func itemElementsToItems(elements []dxml.RssItemElement) []djson.RssItem {
 	if len(elements) == 0 {
-		return []RssItem{}
+		return []djson.RssItem{}
 	}
 
-	rssItems := make([]RssItem, 0, len(elements))
+	rssItems := make([]djson.RssItem, 0, len(elements))
 	for _, each := range elements {
 		rssItems = append(
 			rssItems,
-			RssItem{
+			djson.RssItem{
 				Title:           each.Title,
 				Link:            each.Link,
 				GUID:            each.GUID,
 				PublicationDate: each.PublicationDate,
 				Author:          extractAuthor(each.Credits),
 				URL:             each.Content.URL,
-				Dimensions: Dimensions{
+				Dimensions: djson.Dimensions{
 					Width:  each.Content.Width,
 					Height: each.Content.Height}})
 	}
 	return rssItems
 }
 
-func extractAuthor(credits []ItemCreditElement) string {
+func extractAuthor(credits []dxml.ItemCreditElement) string {
 	for _, eachCredit := range credits {
 		if eachCredit.Role == "author" &&
 			!strings.HasPrefix(eachCredit.Value, "http") {
@@ -151,32 +65,335 @@ func extractAuthor(credits []ItemCreditElement) string {
 	return ""
 }
 
-// ToRssFile converts reader contents to an RssFile
-func ToRssFile(reader io.Reader) (RssFile, error) {
+// ToRssFile converts reader contents to an rssFile
+func toRssFile(reader io.Reader) (rssFile, error) {
 	contentBytes, err := io.ReadAll(reader)
 	if err != nil {
 		shared.ErrorLogger.Println("Failed to read fetched rss file:", err)
-		return RssFile{}, err
+		return rssFile{}, err
 	}
 
-	rssElement := RssElement{}
+	rssElement := dxml.RssElement{}
 	if err = xml.Unmarshal(contentBytes, &rssElement); err != nil {
 		shared.ErrorLogger.Println("Failed to unmarshal XML:", err)
-		return RssFile{}, err
+		return rssFile{}, err
 	}
 	rssItems := itemElementsToItems(rssElement.Channel.RssItems)
 
-	return RssFile{
+	return rssFile{
 		NextURL:  extractNextHref(rssElement.Channel.Links),
 		RssItems: rssItems,
 	}, nil
 }
 
-func extractNextHref(links []LinkElement) string {
+func extractNextHref(links []dxml.LinkElement) string {
 	for _, each := range links {
 		if each.Rel == "next" {
 			return each.Href
 		}
 	}
 	return ""
+}
+
+// NewUUID generates a single UUID string
+// Grabbed from https://play.golang.org/p/4FkNSiUDMg
+func newUUID() (string, error) {
+	uuid := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, uuid)
+	if n != len(uuid) || err != nil {
+		shared.ErrorLogger.Println("UUID generation failed:", err)
+		return "", err
+	}
+	// variant bits; see section 4.1.1
+	uuid[8] = uuid[8]&^0xc0 | 0x80
+	// version 4 (pseudo-random); see section 4.1.3
+	uuid[6] = uuid[6]&^0xf0 | 0x40
+	endResult := fmt.Sprintf("%x-%x-%x-%x-%x",
+		uuid[0:4],
+		uuid[4:6],
+		uuid[6:8],
+		uuid[8:10],
+		uuid[10:])
+	return endResult, nil
+}
+
+// DownloadParams for downloading images from deviant art.
+type downloadParams struct {
+	// Client to use to download the image. Must not be null.
+	Client *http.Client
+	// Dirname is the root dir into which images are downloaded.
+	Dirname string
+	// URL for the image to download.
+	URL string
+	// Don't actually download anything when true.
+	DryRun bool
+	// UUID to act as a sub dir under Dirname.
+	UUID string
+	// Filename for the image
+	Filename string
+}
+
+// Download file params.URL with params as a specification.
+// Return the downloaded file's filepath.
+func downloadImages(params downloadParams) string {
+	fpath := filepath.Join(params.Dirname, params.UUID, params.Filename)
+	if params.DryRun {
+		shared.InfoLogger.Println("Dry run: skip download of ", fpath)
+		return ""
+	}
+	dirpath := filepath.Join(params.Dirname, params.UUID)
+	if err := os.MkdirAll(dirpath, 0700); err != nil {
+		shared.ErrorLogger.Printf(
+			"Failed to create path. Path: %s. Error: %v.\n",
+			dirpath,
+			err)
+		return ""
+	}
+
+	src, err := params.Client.Get(params.URL)
+	if err != nil {
+		shared.ErrorLogger.Println("Failed to fetch image:", err)
+		return ""
+	}
+	defer src.Body.Close()
+
+	imageBytes, err := io.ReadAll(src.Body)
+	imageSize := int64(len(imageBytes))
+	shared.InfoLogger.Printf("Image's size: %d.\n", imageSize)
+	if imageSize <= 0 {
+		return ""
+	}
+
+	dest, err := os.Create(fpath)
+	if err != nil {
+		shared.ErrorLogger.Printf(
+			"Failed to create image file. Filepath: %v. Error: %v.\n",
+			fpath,
+			err)
+		return ""
+	}
+	defer dest.Close()
+	defer shared.InfoLogger.Println("Deviation downloaded:", fpath)
+
+	byteCount, err := dest.Write(imageBytes)
+	if err != nil {
+		shared.ErrorLogger.Println("Failed to copy image to file from", fpath)
+		shared.ErrorLogger.Println("Count of bytes copied:", byteCount)
+		shared.ErrorLogger.Println("Error:", err)
+		return ""
+	}
+
+	return fpath
+}
+
+func deriveFilename(prefix, url string) string {
+	pieces := strings.Split(url, "/")
+	// E.g. image.jpg?token=blaablaa or
+	//      image.jpg
+	withExtra := pieces[len(pieces)-1]
+	// E.g. [image.jpg token=blaablaa] or
+	//      [image.jpg]
+	extraPieces := strings.Split(withExtra, "?")
+	separator := "_"
+	if prefix == "" {
+		separator = ""
+	}
+	return prefix + separator + extraPieces[0]
+}
+
+func fetchAndReadRss(url string) (rssFile, error) {
+	resp, err := fetchRssFile(url)
+	if err != nil {
+		return rssFile{}, err
+	}
+	defer resp.Body.Close()
+	return toRssFile(resp.Body)
+}
+
+// Fetch RSS files and pass the deviations to be downloaded. The RSSs are
+// fetched for user username and each deviation is passed to rssItemChan. Once
+// done, the channel finished is closed to signal that work is done.
+func fetchRss(
+	username string,
+	rssItemChan chan djson.RssItem,
+	finished chan struct{}) {
+	defer close(finished)
+
+	url := strings.Replace(baseRss, "___usern___", username, 1)
+	rssFile, err := fetchAndReadRss(url)
+	if err != nil {
+		return
+	}
+	for {
+		// Pass favorite deviations to be downloaded
+		for _, each := range rssFile.RssItems {
+			rssItemChan <- each
+		}
+		// Fetch more deviations if there are some
+		if len(rssFile.NextURL) == 0 {
+			break
+		}
+
+		rssFile, err = fetchAndReadRss(rssFile.NextURL)
+		if err != nil {
+			return
+		}
+	}
+}
+
+func fetchRssFile(url string) (resp *http.Response, err error) {
+	shared.InfoLogger.Println("Fetch RSS file:", url)
+	resp, err = http.Get(url)
+	if err != nil {
+		shared.ErrorLogger.Println("Failed to fetch RSS file:", err)
+	}
+	return
+}
+
+// Download and save deviations. Jobs are received from rssItemChan and results
+// are passed to savedDeviationChan. Parameter id is the identifier and it isn't
+// functional. It'll be used merely in any logging or printouts. Once the
+// channel rssItemChan no longer provides jobs to perform, waitGroup.Done() is
+// called in order to inform the caller that this method has completed. If
+// dryRun is true, nothing is really downloaded but otherwise the process is
+// executed in a normal fashion.
+func saveDeviations(
+	id int,
+	dirpath string,
+	rssItemChan chan djson.RssItem,
+	savedDeviationChan chan djson.SavedDeviation,
+	waitGroup *sync.WaitGroup,
+	dryRun bool,
+) {
+	defer waitGroup.Done()
+
+	shared.InfoLogger.Println("Starting download worker", id)
+	for each := range rssItemChan {
+		shared.InfoLogger.Printf(
+			"Worker %d about to start downloading %s\n",
+			id,
+			each.URL)
+		shared.InfoLogger.Printf("Worker %d: create cookie jar\n", id)
+		cookieJar, _ := cookiejar.New(nil)
+		client := &http.Client{
+			Jar: cookieJar,
+		}
+		shared.InfoLogger.Printf("Worker %d: create UUID\n", id)
+		uuid, err := newUUID()
+		if err != nil {
+			shared.ErrorLogger.Printf(
+				"UUID generation error when working with %s: %v\n",
+				each.URL,
+				err)
+			continue
+		}
+		filename := deriveFilename("", each.URL)
+		params := downloadParams{
+			Client:   client,
+			Dirname:  dirpath,
+			URL:      each.URL,
+			DryRun:   dryRun,
+			UUID:     uuid,
+			Filename: filename,
+		}
+		shared.InfoLogger.Printf("Worker %d: download image\n", id)
+		filep := downloadImages(params)
+		if len(filep) == 0 {
+			// Nothing to be done if the download failed as the error should
+			// have been reported by the called function.
+			continue
+		}
+		savedDeviationChan <- djson.SavedDeviation{
+			RssItem:  each,
+			Filename: filep,
+		}
+	}
+
+	shared.InfoLogger.Println("Quitting download worker", id)
+}
+
+func deriveURL(url string) (string, error) {
+	res, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	return res.Request.URL.String(), nil
+}
+
+// Collected downloaded deviations into a single DeviantFetch. The deviations
+// are received from savedDeviationChan and the end result is passed to
+// deviantFetchChan.
+func collectSavedDeviations(
+	savedDeviationChan chan djson.SavedDeviation,
+	deviantFetchChan chan djson.DeviantFetch,
+) {
+	var deviations []djson.SavedDeviation
+	for each := range savedDeviationChan {
+		shared.InfoLogger.Println(
+			"Deviation has arrived to be collected:",
+			each.Filename)
+		deviations = append(deviations, each)
+	}
+	deviantFetchChan <- djson.DeviantFetch{
+		SavedDeviations: deviations,
+		Timestamp:       time.Now(),
+	}
+}
+
+// FetchFavorites fetches user username's favorite deviations to directory dirpath. Several
+// images can be downloaded in parallel according to dlWorkerCount. It's value
+// must be at least 1. Return information on all fetched deviations.
+func FetchFavorites(username, dirpath string, dlWorkerCount int) djson.DeviantFetch {
+	// Buffered channel so that fetching RSSs isn't completely blocked by
+	// downloaders.
+	rssItemChan := make(chan djson.RssItem, 500)
+	rssFinished := make(chan struct{})
+	go fetchRss(username, rssItemChan, rssFinished)
+
+	dlWaitGroup := sync.WaitGroup{}
+	savedDeviationChan := make(chan djson.SavedDeviation)
+	for i := 0; i < dlWorkerCount; i++ {
+		dlWaitGroup.Add(1)
+		go saveDeviations(
+			i,
+			dirpath,
+			rssItemChan,
+			savedDeviationChan,
+			&dlWaitGroup,
+			false)
+	}
+
+	deviantFetchChan := make(chan djson.DeviantFetch)
+	go collectSavedDeviations(savedDeviationChan, deviantFetchChan)
+
+	// Wait until RSS downloads have finished
+	<-rssFinished
+	shared.InfoLogger.Println("Go routine for fetching RSS files has finished.")
+	// Close RSS channel in order to signal to downloaders that there's no more
+	// jobs coming.
+	close(rssItemChan)
+	// Wait for the downloaders to finish
+	dlWaitGroup.Wait()
+	shared.InfoLogger.Println("All downloaders have finished.")
+	// Downloaders finished so close chan so that collector stops waiting
+	close(savedDeviationChan)
+	// And finally get information on all favorite deviations from collector
+	return <-deviantFetchChan
+}
+
+// SaveJSON saves information on fetched deviations to file filename.
+func SaveJSON(deviantFetch djson.DeviantFetch, filename string) error {
+	jsonBytes, err := json.Marshal(deviantFetch)
+	if err != nil {
+		shared.ErrorLogger.Println("Conversion to json failed:", err)
+		return err
+	}
+
+	err = os.WriteFile(filename, jsonBytes, 0644)
+	if err != nil {
+		shared.ErrorLogger.Println("Error writing JSON:", err)
+		return err
+	}
+
+	return nil
 }
