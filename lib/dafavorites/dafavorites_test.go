@@ -1,4 +1,4 @@
-package deviantart
+package dafavorites
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	djson "github.com/denarced/dafavorites/shared/deviantart/json"
+	djson "github.com/denarced/dafavorites/lib/dafavorites/json"
 	"github.com/denarced/dafavorites/shared/shared"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"

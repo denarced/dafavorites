@@ -1,5 +1,5 @@
-// Package deviantart contains all code strictly not related CLI.
-package deviantart
+// Package dafavorites contains all code strictly not related CLI.
+package dafavorites
 
 import (
 	"crypto/rand"
@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	djson "github.com/denarced/dafavorites/shared/deviantart/json"
-	dxml "github.com/denarced/dafavorites/shared/deviantart/xml"
+	djson "github.com/denarced/dafavorites/lib/dafavorites/json"
+	dxml "github.com/denarced/dafavorites/lib/dafavorites/xml"
 	"github.com/denarced/dafavorites/shared/shared"
 	"github.com/spf13/afero"
 )

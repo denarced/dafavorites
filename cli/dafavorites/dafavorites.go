@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/denarced/dafavorites/shared/deviantart"
+	"github.com/denarced/dafavorites/lib/dafavorites"
 	"github.com/denarced/dafavorites/shared/shared"
 	"github.com/spf13/afero"
 )
@@ -40,9 +40,9 @@ func main() {
 	}
 
 	ctx := newProductionContext(&afero.Afero{Fs: afero.NewOsFs()}, username)
-	deviantFetch := deviantart.FetchFavorites(dirpath, 4, ctx)
+	deviantFetch := dafavorites.FetchFavorites(dirpath, 4, ctx)
 	shared.Logger.Info("Deviations fetched.", "count", len(deviantFetch.SavedDeviations))
-	err = deviantart.SaveJSON(deviantFetch, "deviantFetch.json")
+	err = dafavorites.SaveJSON(deviantFetch, "deviantFetch.json")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed.")
 		fmt.Fprintln(os.Stderr, err)
@@ -74,7 +74,7 @@ func (v *productionContext) Fsys() *afero.Afero {
 	return v.fsys
 }
 
-func (*productionContext) CreateClient() deviantart.HTTPClient {
+func (*productionContext) CreateClient() dafavorites.HTTPClient {
 	return newRealHTTPClient()
 }
 

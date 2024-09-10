@@ -1,3 +1,3 @@
 #!/bin/sh
 
-vim $(find cmd/ shared/ -type f -name '*.go')
+vim $(find cli/ lib/ shared/ -type f -name '*.go')
