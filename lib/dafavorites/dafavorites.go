@@ -282,15 +282,30 @@ func saveDeviations(
 			filename: filename,
 		}
 		shared.Logger.Debug("Worker: download image.", "id", id, "url", params.url)
-		filep := downloadImages(params, ctx)
-		if len(filep) == 0 {
+		absoluteFilep := downloadImages(params, ctx)
+		if len(absoluteFilep) == 0 {
 			// Nothing to be done if the download failed as the error should
 			// have been reported by the called function.
 			continue
 		}
+		relativeFilep, err := filepath.Rel(dirpath, absoluteFilep)
+		if err != nil {
+			// If this fails, it'll probably fail for all deviations. Thus, might as well just
+			// panic.
+			shared.Logger.Error(
+				"Failed to derive relative filepath.",
+				"error",
+				err,
+				"absolute path",
+				absoluteFilep,
+				"base path",
+				dirpath,
+			)
+			panic("Failed to derive relative filepath.")
+		}
 		savedDeviationChan <- djson.SavedDeviation{
 			RssItem:  each,
-			Filename: filep,
+			Filename: relativeFilep,
 		}
 	}
 

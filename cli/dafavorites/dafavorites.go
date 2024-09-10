@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/denarced/dafavorites/lib/dafavorites"
@@ -42,14 +43,14 @@ func main() {
 	ctx := newProductionContext(&afero.Afero{Fs: afero.NewOsFs()}, username)
 	deviantFetch := dafavorites.FetchFavorites(dirpath, 4, ctx)
 	shared.Logger.Info("Deviations fetched.", "count", len(deviantFetch.SavedDeviations))
-	err = dafavorites.SaveJSON(deviantFetch, "deviantFetch.json")
+	err = dafavorites.SaveJSON(deviantFetch, filepath.Join(dirpath, "deviantFetch.json"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed.")
 		fmt.Fprintln(os.Stderr, err)
 		shared.Logger.Error("Done, failed.", "error", err)
 		os.Exit(3)
 	}
-	fmt.Printf("Done. Deviations download to %s.\n", dirpath)
+	fmt.Printf("Done. Deviations downloaded to %s.\n", dirpath)
 	shared.Logger.Info("Done.")
 }
 
