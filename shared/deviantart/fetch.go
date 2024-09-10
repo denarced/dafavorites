@@ -7,8 +7,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,12 +16,25 @@ import (
 	djson "github.com/denarced/dafavorites/shared/deviantart/json"
 	dxml "github.com/denarced/dafavorites/shared/deviantart/xml"
 	"github.com/denarced/dafavorites/shared/shared"
+	"github.com/spf13/afero"
 )
 
 const (
 	baseRss = "http://backend.deviantart.com/rss.xml" +
 		"?q=favby%3A___usern___&type=deviation"
 )
+
+// HTTPClient .
+type HTTPClient interface {
+	Fetch(url string) ([]byte, error)
+}
+
+// Context for the whole thing.
+type Context interface {
+	CreateClient() HTTPClient
+	Fsys() *afero.Afero
+	Username() string
+}
 
 // RssFile is the items of the one Deviant Art RSS file and the next one's URL
 type rssFile struct {
@@ -66,15 +77,9 @@ func extractAuthor(credits []dxml.ItemCreditElement) string {
 }
 
 // ToRssFile converts reader contents to an rssFile
-func toRssFile(reader io.Reader) (rssFile, error) {
-	contentBytes, err := io.ReadAll(reader)
-	if err != nil {
-		shared.Logger.Error("Failed to read fetched rss file.", "error", err)
-		return rssFile{}, err
-	}
-
+func toRssFile(contentBytes []byte) (rssFile, error) {
 	rssElement := dxml.RssElement{}
-	if err = xml.Unmarshal(contentBytes, &rssElement); err != nil {
+	if err := xml.Unmarshal(contentBytes, &rssElement); err != nil {
 		shared.Logger.Error("Failed to unmarshal XML.", "error", err)
 		return rssFile{}, err
 	}
@@ -119,8 +124,6 @@ func newUUID() (string, error) {
 
 // DownloadParams for downloading images from deviant art.
 type downloadParams struct {
-	// Client to use to download the image. Must not be null.
-	client *http.Client
 	// Dirname is the root dir into which images are downloaded.
 	dirname string
 	// URL for the image to download.
@@ -135,54 +138,41 @@ type downloadParams struct {
 
 // Download file params.url with params as a specification.
 // Return the downloaded file's filepath.
-func downloadImages(params downloadParams) string {
+func downloadImages(params downloadParams, ctx Context) string {
 	fpath := filepath.Join(params.dirname, params.uuid, params.filename)
 	if params.dryRun {
 		shared.Logger.Debug("Dry run: skip download.", "filepath", fpath)
 		return ""
 	}
 	dirpath := filepath.Join(params.dirname, params.uuid)
-	if err := os.MkdirAll(dirpath, 0700); err != nil {
+	if err := ctx.Fsys().MkdirAll(dirpath, 0700); err != nil {
 		shared.Logger.Error("Failed to create path.", "dirpath", dirpath, "error", err)
 		return ""
 	}
 
-	src, err := params.client.Get(params.url)
+	httpClient := ctx.CreateClient()
+	imageBytes, err := httpClient.Fetch(params.url)
 	if err != nil {
 		shared.Logger.Error("Failed to fetch image.", "error", err)
 		return ""
 	}
-	defer src.Body.Close()
-
-	imageBytes, err := io.ReadAll(src.Body)
 	imageSize := int64(len(imageBytes))
 	shared.Logger.Debug("Fetched image.", "filepath", fpath, "size", imageSize)
 	if imageSize <= 0 {
 		return ""
 	}
 
-	dest, err := os.Create(fpath)
-	if err != nil {
-		shared.Logger.Error("Failed to create image file.", "filepath", fpath, "error", err)
-		return ""
-	}
-	defer dest.Close()
-	defer shared.Logger.Debug("Deviation downloaded.", "filepath", fpath)
-
-	byteCount, err := dest.Write(imageBytes)
-	if err != nil {
+	if err := ctx.Fsys().WriteFile(fpath, imageBytes, 0600); err != nil {
 		shared.Logger.Error(
 			"Failed to copy image to file.",
 			"filepath",
 			fpath,
-			"byte count",
-			byteCount,
 			"error",
 			err,
 		)
 		return ""
 	}
-
+	defer shared.Logger.Debug("Deviation downloaded.", "filepath", fpath)
 	return fpath
 }
 
@@ -201,26 +191,25 @@ func deriveFilename(prefix, url string) string {
 	return prefix + separator + extraPieces[0]
 }
 
-func fetchAndReadRss(url string) (rssFile, error) {
-	resp, err := fetchRssFile(url)
+func fetchAndReadRss(url string, ctx Context) (rssFile, error) {
+	bytes, err := fetchRssFile(url, ctx)
 	if err != nil {
 		return rssFile{}, err
 	}
-	defer resp.Body.Close()
-	return toRssFile(resp.Body)
+	return toRssFile(bytes)
 }
 
 // Fetch RSS files and pass the deviations to be downloaded. The RSSs are
 // fetched for user username and each deviation is passed to rssItemChan. Once
 // done, the channel finished is closed to signal that work is done.
 func fetchRss(
-	username string,
 	rssItemChan chan djson.RssItem,
-	finished chan struct{}) {
+	finished chan struct{},
+	ctx Context) {
 	defer close(finished)
 
-	url := strings.Replace(baseRss, "___usern___", username, 1)
-	rssFile, err := fetchAndReadRss(url)
+	url := strings.Replace(baseRss, "___usern___", ctx.Username(), 1)
+	rssFile, err := fetchAndReadRss(url, ctx)
 	if err != nil {
 		return
 	}
@@ -234,16 +223,16 @@ func fetchRss(
 			break
 		}
 
-		rssFile, err = fetchAndReadRss(rssFile.nextURL)
+		rssFile, err = fetchAndReadRss(rssFile.nextURL, ctx)
 		if err != nil {
 			return
 		}
 	}
 }
 
-func fetchRssFile(url string) (resp *http.Response, err error) {
+func fetchRssFile(url string, ctx Context) (bytes []byte, err error) {
 	shared.Logger.Debug("About to fetch RSS file.", "url", url)
-	resp, err = http.Get(url)
+	bytes, err = ctx.CreateClient().Fetch(url)
 	if err != nil {
 		shared.Logger.Error("Failed to fetch RSS file.", "error", err)
 	}
@@ -265,6 +254,7 @@ func saveDeviations(
 	savedDeviationChan chan djson.SavedDeviation,
 	waitGroup *sync.WaitGroup,
 	dryRun bool,
+	ctx Context,
 ) {
 	defer waitGroup.Done()
 
@@ -276,11 +266,7 @@ func saveDeviations(
 			id,
 			"url",
 			each.URL)
-		shared.Logger.Debug("Worker: create cookie jar.", "id", id)
-		cookieJar, _ := cookiejar.New(nil)
-		client := &http.Client{
-			Jar: cookieJar,
-		}
+		shared.Logger.Debug("Worker: create HTTP client.", "id", id)
 		shared.Logger.Debug("Worker: create UUID.", "id", id)
 		uuid, err := newUUID()
 		if err != nil {
@@ -289,7 +275,6 @@ func saveDeviations(
 		}
 		filename := deriveFilename("", each.URL)
 		params := downloadParams{
-			client:   client,
 			dirname:  dirpath,
 			url:      each.URL,
 			dryRun:   dryRun,
@@ -297,7 +282,7 @@ func saveDeviations(
 			filename: filename,
 		}
 		shared.Logger.Debug("Worker: download image.", "id", id, "url", params.url)
-		filep := downloadImages(params)
+		filep := downloadImages(params, ctx)
 		if len(filep) == 0 {
 			// Nothing to be done if the download failed as the error should
 			// have been reported by the called function.
@@ -310,14 +295,6 @@ func saveDeviations(
 	}
 
 	shared.Logger.Info("Quitting download worker.", "id", id)
-}
-
-func deriveURL(url string) (string, error) {
-	res, err := http.Get(url)
-	if err != nil {
-		return "", err
-	}
-	return res.Request.URL.String(), nil
 }
 
 // Collected downloaded deviations into a single DeviantFetch. The deviations
@@ -341,12 +318,12 @@ func collectSavedDeviations(
 // FetchFavorites fetches user username's favorite deviations to directory dirpath. Several
 // images can be downloaded in parallel according to dlWorkerCount. It's value
 // must be at least 1. Return information on all fetched deviations.
-func FetchFavorites(username, dirpath string, dlWorkerCount int) djson.DeviantFetch {
+func FetchFavorites(dirpath string, dlWorkerCount int, ctx Context) djson.DeviantFetch {
 	// Buffered channel so that fetching RSSs isn't completely blocked by
 	// downloaders.
 	rssItemChan := make(chan djson.RssItem, 500)
 	rssFinished := make(chan struct{})
-	go fetchRss(username, rssItemChan, rssFinished)
+	go fetchRss(rssItemChan, rssFinished, ctx)
 
 	dlWaitGroup := sync.WaitGroup{}
 	savedDeviationChan := make(chan djson.SavedDeviation)
@@ -358,7 +335,8 @@ func FetchFavorites(username, dirpath string, dlWorkerCount int) djson.DeviantFe
 			rssItemChan,
 			savedDeviationChan,
 			&dlWaitGroup,
-			false)
+			false,
+			ctx)
 	}
 
 	deviantFetchChan := make(chan djson.DeviantFetch)

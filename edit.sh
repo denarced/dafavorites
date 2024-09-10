@@ -1,4 +1,3 @@
 #!/bin/sh
 
-ctags -R .
-vim `find . -type f -name \*.go`
+vim $(find cmd/ shared/ -type f -name '*.go')

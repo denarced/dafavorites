@@ -3,11 +3,15 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
 
 	"github.com/denarced/dafavorites/shared/deviantart"
 	"github.com/denarced/dafavorites/shared/shared"
+	"github.com/spf13/afero"
 )
 
 func main() {
@@ -35,7 +39,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	deviantFetch := deviantart.FetchFavorites(username, dirpath, 4)
+	ctx := newProductionContext(&afero.Afero{Fs: afero.NewOsFs()}, username)
+	deviantFetch := deviantart.FetchFavorites(dirpath, 4, ctx)
 	shared.Logger.Info("Deviations fetched.", "count", len(deviantFetch.SavedDeviations))
 	err = deviantart.SaveJSON(deviantFetch, "deviantFetch.json")
 	if err != nil {
@@ -46,4 +51,52 @@ func main() {
 	}
 	fmt.Printf("Done. Deviations download to %s.\n", dirpath)
 	shared.Logger.Info("Done.")
+}
+
+type productionContext struct {
+	fsys     *afero.Afero
+	username string
+}
+
+func newProductionContext(fsys *afero.Afero, username string) *productionContext {
+	return &productionContext{
+		fsys:     fsys,
+		username: username,
+	}
+}
+
+// Username .
+func (v *productionContext) Username() string {
+	return v.username
+}
+
+func (v *productionContext) Fsys() *afero.Afero {
+	return v.fsys
+}
+
+func (*productionContext) CreateClient() deviantart.HTTPClient {
+	return newRealHTTPClient()
+}
+
+// RealHTTPClient implements deviantart.HTTPClient.
+type RealHTTPClient struct {
+	client *http.Client
+}
+
+func newRealHTTPClient() *RealHTTPClient {
+	cookieJar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Jar: cookieJar,
+	}
+	return &RealHTTPClient{client: client}
+}
+
+// Fetch .
+func (v *RealHTTPClient) Fetch(url string) ([]byte, error) {
+	res, err := v.client.Get(url)
+	if err != nil {
+		return []byte{}, err
+	}
+	defer res.Body.Close()
+	return io.ReadAll(res.Body)
 }
